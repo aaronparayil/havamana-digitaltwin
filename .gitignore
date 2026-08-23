@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Raw climate grids are kept locally and processed by the backend.
+data/**/*.GRD
+data/**/*.grd
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
