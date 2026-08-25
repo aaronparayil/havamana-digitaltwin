@@ -1,0 +1,276 @@
+/* Navbar Container */
+.navbar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(23, 60, 58, 0.04);
+}
+
+.navbar-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 4.5%;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+/* Brand/Logo Section */
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.navbar-logo {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.navbar-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar-title strong {
+  display: block;
+  font: 600 16px / 1.1 Fraunces, serif;
+  color: var(--ink);
+}
+
+.navbar-title small {
+  display: block;
+  font: 10px 'DM Mono', monospace;
+  color: #96a099;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* Desktop Navigation Menu */
+.navbar-menu {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 28px;
+  flex: 1;
+  justify-content: center;
+}
+
+.nav-link {
+  font: 13px / 1.5 'DM Sans', sans-serif;
+  color: #73817b;
+  text-decoration: none;
+  position: relative;
+  padding: 4px 0;
+  transition: color 0.2s ease;
+}
+
+.nav-link:hover {
+  color: var(--ink);
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--coral);
+  transition: width 0.2s ease;
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
+
+/* Right Actions Section */
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.action-button {
+  border: 0;
+  background: transparent;
+  color: #73817b;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  position: relative;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.action-button:hover {
+  color: var(--ink);
+  background: rgba(43, 138, 114, 0.06);
+}
+
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  background: var(--coral);
+  border-radius: 50%;
+}
+
+.avatar-button {
+  padding: 2px;
+}
+
+.avatar-sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #dce8d8;
+  color: var(--teal);
+  font: 11px / 32px 'DM Mono', monospace;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Mobile Menu Toggle Button */
+.mobile-menu-toggle {
+  display: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+/* Mobile Menu */
+.mobile-menu {
+  display: none;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.mobile-menu.is-open {
+  max-height: 300px;
+}
+
+.mobile-nav-links {
+  list-style: none;
+  margin: 0;
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-nav-link {
+  display: block;
+  font: 13px / 1.5 'DM Sans', sans-serif;
+  color: #73817b;
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 4px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.mobile-nav-link:active {
+  background: rgba(43, 138, 114, 0.1);
+  color: var(--ink);
+}
+
+/* Responsive Breakpoints */
+
+/* Tablet: Hide some desktop nav links */
+@media (max-width: 1050px) {
+  .navbar-container {
+    padding: 0 3.5%;
+    gap: 20px;
+  }
+
+  .navbar-menu {
+    gap: 16px;
+  }
+
+  .nav-link {
+    font-size: 12px;
+  }
+}
+
+/* Mobile: Show hamburger menu, hide desktop nav */
+@media (max-width: 768px) {
+  .navbar-container {
+    height: 64px;
+    padding: 0 16px;
+    gap: 16px;
+  }
+
+  .navbar-title small {
+    display: none;
+  }
+
+  .navbar-title strong {
+    font-size: 14px;
+  }
+
+  .navbar-menu {
+    display: none;
+  }
+
+  .mobile-menu-toggle {
+    display: grid;
+    place-items: center;
+  }
+
+  .mobile-menu {
+    display: block;
+  }
+
+  .navbar-actions {
+    gap: 8px;
+  }
+
+  .action-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .avatar-sm {
+    width: 28px;
+    height: 28px;
+    font-size: 9px;
+    line-height: 28px;
+  }
+}
+
+/* Small Mobile: Further reduce spacing */
+@media (max-width: 480px) {
+  .navbar-container {
+    padding: 0 12px;
+  }
+
+  .navbar-logo {
+    font-size: 24px;
+  }
+
+  .navbar-actions {
+    gap: 4px;
+  }
+
+  .action-button {
+    padding: 4px;
+  }
+}

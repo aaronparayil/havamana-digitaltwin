@@ -1,0 +1,140 @@
+.profile-menu {
+  position: absolute;
+  top: 76px;
+  right: 0;
+  width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(23, 60, 58, 0.15);
+  z-index: 150;
+  overflow: hidden;
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.profile-header {
+  display: flex;
+  gap: 14px;
+  padding: 18px 16px;
+  background: rgba(43, 138, 114, 0.04);
+}
+
+.profile-avatar-large {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dce8d8;
+  color: var(--teal);
+  font: 700 16px 'DM Mono', monospace;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.profile-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-name {
+  font: 600 14px 'DM Sans', sans-serif;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.profile-role {
+  font-size: 11px;
+  color: #96a099;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.profile-email {
+  font-size: 12px;
+  color: #78847e;
+}
+
+.profile-divider {
+  height: 1px;
+  background: var(--line);
+}
+
+.profile-nav {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+}
+
+.profile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background 0.2s ease;
+  font: 13px 'DM Sans', sans-serif;
+}
+
+.profile-menu-item:hover {
+  background: rgba(43, 138, 114, 0.04);
+}
+
+.menu-icon {
+  flex-shrink: 0;
+  color: #73817b;
+}
+
+.profile-menu-item span {
+  flex: 1;
+}
+
+.menu-arrow {
+  flex-shrink: 0;
+  color: #96a099;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.profile-menu-item:hover .menu-arrow {
+  opacity: 1;
+}
+
+.profile-logout {
+  width: 100%;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: none;
+  color: #c35a4c;
+  cursor: pointer;
+  font: 13px 'DM Sans', sans-serif;
+  text-align: left;
+  transition: background 0.2s ease;
+}
+
+.profile-logout:hover {
+  background: rgba(195, 90, 76, 0.08);
+}
+
+@media (max-width: 768px) {
+  .profile-menu {
+    width: 280px;
+  }
+}
