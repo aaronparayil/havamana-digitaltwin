@@ -1,16 +1,18 @@
 import { useState } from 'react'
-import { Routes, Route, Link } from 'react-router-dom'
-import { Menu, X, Wind, Settings2, LayoutDashboard, MapPinned, BarChart3 } from 'lucide-react'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { Menu, X, Wind, Settings2, LayoutDashboard, MapPinned, BarChart3, Activity, Cpu } from 'lucide-react'
 import { Navbar } from './components/Navbar'
 import { Dashboard } from './pages/Dashboard'
 import { Analytics } from './pages/Analytics'
 import { Data } from './pages/Data'
 import { Reports } from './pages/Reports'
+import { ModelSimulation } from './pages/ModelSimulation'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const location = useLocation()
 
   return (
     <div className="app-shell">
@@ -28,8 +30,11 @@ function App() {
         </button>
         <div className="side-label">Workspace</div>
         <nav>
-          <Link className="nav-item" to="/" onClick={() => setSidebarOpen(false)}>
+          <Link className={`nav-item ${location.pathname === '/' ? 'active' : ''}`} to="/" onClick={() => setSidebarOpen(false)}>
             <LayoutDashboard size={18} /> Overview
+          </Link>
+          <Link className={`nav-item ${location.pathname === '/model-test' ? 'active' : ''}`} to="/model-test" onClick={() => setSidebarOpen(false)}>
+            <Activity size={18} /> Model Simulation
           </Link>
           <div className="nav-item-wrap">
             <button className="nav-item disabled">
@@ -44,8 +49,11 @@ function App() {
             <span className="coming-soon-tip">Coming soon</span>
           </div>
         </nav>
-        <div className="side-label second">Tools</div>
+        <div className="side-label second">AI Models & Tools</div>
         <nav>
+          <Link className={`nav-item ${location.pathname === '/model-test' ? 'active' : ''}`} to="/model-test" onClick={() => setSidebarOpen(false)}>
+            <Cpu size={18} /> ConvLSTM2D Model
+          </Link>
           <div className="nav-item-wrap">
             <button className="nav-item disabled">
               <Wind size={18} /> Air quality
@@ -62,8 +70,8 @@ function App() {
         <div className="sidebar-foot">
           <div className="signal-dot" />
           <div>
-            <strong>Data systems online</strong>
-            <small>Last synced 8 min ago</small>
+            <strong>ConvLSTM model active</strong>
+            <small>14-day lookahead sync</small>
           </div>
         </div>
       </aside>
@@ -73,8 +81,8 @@ function App() {
             <Menu size={22} />
           </button>
           <div className="breadcrumb">
-            Karnataka / <strong>Bengaluru pilot</strong>
-            <span className="poc-badge"><i />Proof of concept</span>
+            India Digital Twin / <strong>Karnataka State Forecast Model</strong>
+            <span className="poc-badge"><i />TensorFlow 2.x</span>
           </div>
           <div className="top-actions">
             {/* Top actions handled by Navbar */}
@@ -82,6 +90,7 @@ function App() {
         </header>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/model-test" element={<ModelSimulation />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/data" element={<Data />} />
           <Route path="/reports" element={<Reports />} />

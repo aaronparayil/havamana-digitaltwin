@@ -18,6 +18,7 @@ export function Navbar() {
 
   const navLinks = [
     { label: 'Dashboard', to: '/' },
+    { label: 'Model Simulation', to: '/model-test' },
     { label: 'Analytics', to: '/analytics' },
     { label: 'Data', to: '/data' },
     { label: 'Reports', to: '/reports' },
