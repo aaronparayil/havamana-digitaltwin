@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from pathlib import Path
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Optional
 
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -27,36 +27,38 @@ class ClimateModelTrainer:
         self,
         model: tf.keras.Model = None,
         learning_rate: float = config.LEARNING_RATE,
-        save_path: Path = config.MODEL_SAVE_PATH
+        save_path: Path = config.MODEL_SAVE_PATH,
+        land_mask: Optional[np.ndarray] = None
     ):
         self.save_path = Path(save_path)
-        self.model = model if model is not None else build_convlstm_model(learning_rate=learning_rate)
+        self.model = model if model is not None else build_convlstm_model(learning_rate=learning_rate, land_mask=land_mask)
         self.history = None
-        
+
     def train(
         self,
-        train_data: Tuple[np.ndarray, np.ndarray],
-        val_data: Tuple[np.ndarray, np.ndarray],
+        train_data: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        val_data: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         epochs: int = config.EPOCHS,
         batch_size: int = config.BATCH_SIZE,
         patience: int = config.EARLY_STOPPING_PATIENCE
     ) -> tf.keras.callbacks.History:
         """
         Executes model training with early stopping and learning rate scheduling.
+        train_data / val_data: (X, Y, Cal_in, Cal_out)
         """
-        X_train, Y_train = train_data
-        X_val, Y_val = val_data
-        
+        X_train, Y_train, Cal_in_train, Cal_out_train = train_data
+        X_val, Y_val, Cal_in_val, Cal_out_val = val_data
+
         print(f"\n==========================================")
-        print(f"Starting ConvLSTM2D Training on All-India Climate Grids")
+        print(f"Starting ConvLSTM2D Training on Karnataka Climate Grids")
         print(f"Train samples: {X_train.shape[0]} | Val samples: {X_val.shape[0]}")
         print(f"Input Shape:   {X_train.shape[1:]} (30 days x 32 x 32 x 3)")
         print(f"Target Shape:  {Y_train.shape[1:]} (14 days lookahead x 32 x 32 x 3)")
         print(f"Epochs:        {epochs} | Batch size: {batch_size}")
         print(f"==========================================\n")
-        
-        train_ds = get_tf_dataset(X_train, Y_train, batch_size=batch_size, shuffle=True)
-        val_ds = get_tf_dataset(X_val, Y_val, batch_size=batch_size, shuffle=False)
+
+        train_ds = get_tf_dataset(X_train, Y_train, Cal_in_train, Cal_out_train, batch_size=batch_size, shuffle=True)
+        val_ds = get_tf_dataset(X_val, Y_val, Cal_in_val, Cal_out_val, batch_size=batch_size, shuffle=False)
         
         callbacks = [
             tf.keras.callbacks.EarlyStopping(
@@ -68,7 +70,7 @@ class ClimateModelTrainer:
             tf.keras.callbacks.ReduceLROnPlateau(
                 monitor="val_loss",
                 factor=0.5,
-                patience=3,
+                patience=2,
                 min_lr=1e-6,
                 verbose=1
             ),

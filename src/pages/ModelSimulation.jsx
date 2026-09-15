@@ -8,6 +8,7 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, Title, Tooltip as ChartTooltip, Legend, Filler
 } from 'chart.js'
+import { DatePicker } from '../components/DatePicker'
 import './ModelSimulation.css'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
@@ -68,6 +69,15 @@ const CITIES = [
   { name: 'Kalaburagi', y: 26, x: 19, region: 'North Interior Semi-Arid' }
 ]
 
+// Local-timezone "today" as YYYY-MM-DD, used to default the date picker to a live current date
+function getTodayISO() {
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export function ModelSimulation() {
   const [selectedScenario, setSelectedScenario] = useState('immediate')
   const [activeVariable, setActiveVariable] = useState('rainfall') // 'rainfall' | 'tmax' | 'tmin'
@@ -77,6 +87,15 @@ export function ModelSimulation() {
   const [selectedCity, setSelectedCity] = useState('Bengaluru (Pilot)')
   const [hoveredPixel, setHoveredPixel] = useState(null)
 
+  // Explorer mode: forward-looking scenarios vs. a specific calendar date lookup
+  const [explorerMode, setExplorerMode] = useState('future') // 'future' | 'date'
+  const [selectedDate, setSelectedDate] = useState(getTodayISO())
+  const [dateForecast, setDateForecast] = useState(null)
+  const [dateLoading, setDateLoading] = useState(false)
+  const [dateError, setDateError] = useState(null)
+  const [dateLeadDay, setDateLeadDay] = useState(1)
+  const [dateViewMode, setDateViewMode] = useState('forecast') // 'forecast' | 'actual' | 'error'
+
   // API State
   const [apiConnected, setApiConnected] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -84,6 +103,29 @@ export function ModelSimulation() {
   const [benchmarkMetrics, setBenchmarkMetrics] = useState(null)
 
   const timerRef = useRef(null)
+
+  // Fetch a 14-day forecast starting at a specific calendar date (predicted vs. actual, if recorded)
+  const fetchDateForecast = async (dateStr) => {
+    setDateLoading(true)
+    setDateError(null)
+    try {
+      const res = await fetch(`http://localhost:5005/api/forecast/date?date=${dateStr}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Request failed')
+      setDateForecast(data)
+      setDateLeadDay(1)
+      setApiConnected(true)
+    } catch (err) {
+      setDateForecast(null)
+      setDateError(
+        err.message === 'Failed to fetch'
+          ? 'Could not reach the forecasting API. Start the backend (python backend/api/app.py) to explore historical dates.'
+          : err.message
+      )
+    } finally {
+      setDateLoading(false)
+    }
+  }
 
   // Fetch true future forward forecast from Flask API
   const fetchFutureForecast = async (scenario) => {
@@ -290,6 +332,13 @@ export function ModelSimulation() {
     fetchMetrics()
   }, [selectedScenario])
 
+  useEffect(() => {
+    if (explorerMode === 'date' && !dateForecast && !dateLoading) {
+      fetchDateForecast(selectedDate)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explorerMode])
+
   // Playback timer
   useEffect(() => {
     if (isPlaying) {
@@ -318,6 +367,32 @@ export function ModelSimulation() {
     if (viewMode === 'anomaly') return currentDayData.anomaly_grid?.[activeVariable]
     return currentDayData.forecast_grid?.[activeVariable]
   }, [currentDayData, viewMode, activeVariable])
+
+  // Current day grid data for the date-explorer mode
+  const currentDateDay = useMemo(() => {
+    if (!dateForecast || !dateForecast.days || dateForecast.days.length === 0) return null
+    return dateForecast.days[dateLeadDay - 1] || dateForecast.days[0]
+  }, [dateForecast, dateLeadDay])
+
+  const dateActiveGrid = useMemo(() => {
+    if (!currentDateDay) return null
+    if (dateViewMode === 'forecast') return currentDateDay.forecast_grid?.[activeVariable]
+    if (dateViewMode === 'actual') return currentDateDay.actual_grid?.[activeVariable]
+    if (dateViewMode === 'error') return currentDateDay.error_grid?.[activeVariable]
+    return currentDateDay.forecast_grid?.[activeVariable]
+  }, [currentDateDay, dateViewMode, activeVariable])
+
+  // Sequential magnitude scale for absolute forecast error (date-explorer "error" layer)
+  const getErrorColor = (val, isLand = true) => {
+    if (!isLand) return 'rgba(23, 60, 58, 0.15)'
+    const v = Math.abs(val || 0)
+    const maxErr = activeVariable === 'rainfall' ? 20 : 5
+    const norm = Math.min(1, v / maxErr)
+    const r = Math.round(255 - norm * 30)
+    const g = Math.round(240 - norm * 200)
+    const b = Math.round(200 - norm * 190)
+    return `rgb(${r}, ${g}, ${b})`
+  }
 
   // Color scaling helper
   const getColor = (val, variable, mode, isLand = true) => {
@@ -389,6 +464,13 @@ export function ModelSimulation() {
     }
   }
 
+  // Formats an ISO date string (YYYY-MM-DD) as "Sep 14, 2026"
+  const formatPrettyDate = (isoStr) => {
+    if (!isoStr) return ''
+    const d = new Date(`${isoStr}T00:00:00`)
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   // Chart Data for City Time Series
   const cityData = forecastData?.city_timeseries?.[selectedCity]
   const chartDates = cityData?.dates || []
@@ -451,6 +533,55 @@ export function ModelSimulation() {
     }
   }
 
+  // Chart Data for the date-explorer City Time Series: predicted vs. actual recorded when
+  // ground truth exists (historical dates), or vs. the 15-Yr historical normal as the most
+  // meaningful reference when it doesn't (future dates) — the comparison series switches
+  // seamlessly based on what the API actually returned for this date, never on the date's
+  // position relative to "today" client-side, so it can never show a stale/wrong label.
+  const dateCityData = dateForecast?.city_timeseries?.[selectedCity]
+  const dateChartDates = dateCityData?.dates || []
+  const dateChartLabels = dateChartDates.map(d => {
+    const parts = d.split('-')
+    return `${parts[1]}/${parts[2]}`
+  })
+  const hasActualComparison = Boolean(dateForecast?.has_ground_truth && dateCityData?.[`actual_${activeVariable}`])
+  const comparisonLabel = hasActualComparison ? 'Actual Recorded' : '15-Yr Historical Normal'
+
+  const dateLineChartData = {
+    labels: dateChartLabels,
+    datasets: [
+      {
+        label: `ConvLSTM2D Forecast (${activeVariable.toUpperCase()})`,
+        data: dateCityData ? dateCityData[`pred_${activeVariable}`] : [],
+        borderColor: activeVariable === 'rainfall' ? '#2563eb' : '#e11d48',
+        backgroundColor: activeVariable === 'rainfall' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(225, 29, 72, 0.12)',
+        fill: true,
+        tension: 0.35,
+        borderWidth: 3,
+        pointRadius: 4,
+        pointBackgroundColor: '#ffffff',
+        pointBorderWidth: 2,
+      },
+      ...(hasActualComparison ? [{
+        label: `Actual Recorded (${activeVariable.toUpperCase()})`,
+        data: dateCityData[`actual_${activeVariable}`],
+        borderColor: '#173c3a',
+        backgroundColor: 'transparent',
+        borderDash: [5, 4],
+        borderWidth: 2,
+        pointRadius: 3,
+      }] : (dateCityData?.[`climatology_${activeVariable}`] ? [{
+        label: `15-Yr Historical Normal (${activeVariable.toUpperCase()})`,
+        data: dateCityData[`climatology_${activeVariable}`],
+        borderColor: '#059669',
+        backgroundColor: 'transparent',
+        borderDash: [5, 4],
+        borderWidth: 2,
+        pointRadius: 3,
+      }] : []))
+    ]
+  }
+
   return (
     <div className="sim-wrap">
       {/* Top Header */}
@@ -488,6 +619,200 @@ export function ModelSimulation() {
         </div>
       </section>
 
+      {/* Explorer Mode Tabs: Forward Scenarios vs. a Specific Calendar Date */}
+      <section className="sim-controls-bar" style={{ marginBottom: 4 }}>
+        <div className="control-group">
+          <span className="control-label">Explore:</span>
+          <div className="pill-group">
+            <button
+              className={`pill-btn ${explorerMode === 'future' ? 'active' : ''}`}
+              onClick={() => setExplorerMode('future')}
+            >
+              🔮 Future Scenarios
+            </button>
+            <button
+              className={`pill-btn ${explorerMode === 'date' ? 'active' : ''}`}
+              onClick={() => setExplorerMode('date')}
+            >
+              📅 Pick a Date
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {explorerMode === 'date' ? (
+      <>
+      {/* Date Explorer: forecast (and actual recorded climate, if available) for any chosen date, past or future */}
+      <section className="sim-controls-bar">
+        <div className="control-group">
+          <span className="control-label">Forecast Start Date:</span>
+          <DatePicker
+            value={selectedDate}
+            minDate="2010-01-31"
+            onChange={(val) => {
+              setSelectedDate(val)
+              if (val) fetchDateForecast(val)
+            }}
+          />
+          <button className="preset-btn" onClick={() => fetchDateForecast(selectedDate)}>
+            <RefreshCw size={14} className={dateLoading ? 'spin' : ''} /> {dateLoading ? 'Loading...' : 'Load'}
+          </button>
+        </div>
+
+        <div className="control-group">
+          <span className="control-label">Variable:</span>
+          <div className="pill-group">
+            <button className={`pill-btn ${activeVariable === 'rainfall' ? 'active' : ''}`} onClick={() => setActiveVariable('rainfall')}>
+              <CloudRain size={14} /> Rainfall (mm)
+            </button>
+            <button className={`pill-btn ${activeVariable === 'tmax' ? 'active' : ''}`} onClick={() => setActiveVariable('tmax')}>
+              <Thermometer size={14} /> Max Temp (°C)
+            </button>
+            <button className={`pill-btn ${activeVariable === 'tmin' ? 'active' : ''}`} onClick={() => setActiveVariable('tmin')}>
+              <Thermometer size={14} /> Min Temp (°C)
+            </button>
+          </div>
+        </div>
+
+        <div className="control-group">
+          <span className="control-label">Layer:</span>
+          <div className="pill-group">
+            <button className={`pill-btn ${dateViewMode === 'forecast' ? 'active' : ''}`} onClick={() => setDateViewMode('forecast')}>
+              Model Forecast
+            </button>
+            {dateForecast?.has_ground_truth && (
+              <>
+                <button className={`pill-btn ${dateViewMode === 'actual' ? 'active' : ''}`} onClick={() => setDateViewMode('actual')}>
+                  Actual Recorded
+                </button>
+                <button className={`pill-btn ${dateViewMode === 'error' ? 'active' : ''}`} onClick={() => setDateViewMode('error')}>
+                  Forecast Error
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {dateError && (
+        <section className="timeline-card" style={{ color: '#a15c2e', font: '13px "DM Sans", sans-serif' }}>
+          ⚠️ {dateError}
+        </section>
+      )}
+
+      {dateForecast && (
+        <>
+          <section className="timeline-card">
+            <div className="timeline-top">
+              <div className="timeline-playback">
+                <div>
+                  <strong style={{ font: '600 16px Fraunces, serif', color: '#173c3a' }}>
+                    Forecast Horizon: Day +{dateLeadDay} of 14
+                  </strong>
+                  <span style={{ marginLeft: 8, font: '11px "DM Mono", monospace', color: '#78847e' }}>
+                    ({currentDateDay?.date})
+                  </span>
+                </div>
+              </div>
+              <div style={{ font: '11px "DM Mono", monospace', color: dateForecast.has_ground_truth ? '#2b8a72' : '#a67b2e' }}>
+                {dateForecast.has_ground_truth ? '● Ground truth available for this window' : '● Beyond recorded data — model forecast only'}
+              </div>
+            </div>
+            <div className="timeline-slider-wrap">
+              <input
+                type="range"
+                min="1"
+                max="14"
+                value={dateLeadDay}
+                onChange={(e) => setDateLeadDay(parseInt(e.target.value))}
+                className="timeline-slider"
+              />
+              <div className="timeline-ticks">
+                {Array.from({ length: 14 }, (_, i) => i + 1).map((d) => (
+                  <span key={d} className={d === dateLeadDay ? 'active' : ''} style={{ cursor: 'pointer' }} onClick={() => setDateLeadDay(d)}>
+                    +{d}d
+                  </span>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="sim-main-grid">
+            <div className="map-card">
+              <div className="map-card-header">
+                <div>
+                  <span className="section-kicker">Karnataka Spatial Grid (32×32 High-Res)</span>
+                  <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>
+                    {dateViewMode === 'forecast' ? 'ConvLSTM2D Forecast' : dateViewMode === 'actual' ? 'Actual Recorded Climate' : 'Absolute Forecast Error'} — {activeVariable.toUpperCase()}
+                  </h2>
+                </div>
+                <span style={{ font: '11px "DM Mono", monospace', color: '#8c9790' }}>
+                  Extents: 11.5°N–18.5°N, 74.0°E–78.6°E (~22 km/cell)
+                </span>
+              </div>
+
+              <div className="map-canvas-container">
+                {dateActiveGrid && (
+                  <svg viewBox="0 0 32 32" className="raster-grid-svg" preserveAspectRatio="none">
+                    {dateActiveGrid.map((row, y) =>
+                      row.map((val, x) => {
+                        const activeMask = KARNATAKA_LAND_MASK
+                        const isLand = Boolean(activeMask && activeMask[y] && activeMask[y][x] > 0.5)
+                        const svgY = 31 - y
+                        return (
+                          <rect
+                            key={`${x}-${y}`}
+                            x={x}
+                            y={svgY}
+                            width="1.05"
+                            height="1.05"
+                            fill={dateViewMode === 'error' ? getErrorColor(val, isLand) : getColor(val, activeVariable, 'forecast', isLand)}
+                            stroke={isLand ? 'rgba(255, 255, 255, 0.12)' : 'none'}
+                            strokeWidth={isLand ? 0.05 : 0}
+                            style={{ transition: 'fill 0.15s ease' }}
+                          />
+                        )
+                      })
+                    )}
+                    {CITIES.map((city, idx) => {
+                      const svgY = 31 - city.y
+                      return (
+                        <g key={idx} transform={`translate(${city.x + 0.5}, ${svgY + 0.5})`}>
+                          <circle r="0.9" fill="#173c3a" stroke="#fff" strokeWidth="0.3" />
+                          <circle r="0.4" fill="#d16f43" />
+                        </g>
+                      )
+                    })}
+                  </svg>
+                )}
+              </div>
+            </div>
+
+            <div className="chart-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div>
+                  <span className="section-kicker">Regional Point Trajectory</span>
+                  <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Forecast vs. {comparisonLabel}</h2>
+                </div>
+                <select className="city-select" value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>
+                  {CITIES.map((c, i) => (
+                    <option key={i} value={c.name}>{c.name} ({c.region})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="chart-area">
+                <Line data={dateLineChartData} options={lineChartOptions} />
+              </div>
+              <div style={{ marginTop: 14, padding: '12px 14px', background: '#f5efe4', borderRadius: 4, font: '11px "DM Sans", sans-serif', color: '#5f7069' }}>
+                💡 <strong>Date Explorer:</strong> Pick any date from 2010 onward — past or future. Historical dates show the model's forecast alongside what actually happened; dates beyond the recorded dataset show a forecast grounded in the most recent observations from that same time of year.
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+      </>
+      ) : (
+      <>
       {/* Scenario & Variable Control Bar */}
       <section className="sim-controls-bar">
         {/* Scenarios */}
@@ -503,6 +828,15 @@ export function ModelSimulation() {
               {s.label}
             </button>
           ))}
+          {forecastData?.forecast_start_date && forecastData?.forecast_end_date && (
+            <span
+              className="sim-badge"
+              style={{ background: '#e0e7ff', color: '#3730a3' }}
+              title="Actual calendar dates this scenario forecasts, resolved relative to today"
+            >
+              📅 {formatPrettyDate(forecastData.forecast_start_date)} → {formatPrettyDate(forecastData.forecast_end_date)}
+            </span>
+          )}
         </div>
 
         {/* Variable Switcher */}
@@ -735,6 +1069,8 @@ export function ModelSimulation() {
           </div>
         </div>
       </section>
+      </>
+      )}
 
       {/* Model Benchmark Accuracy Cards */}
       <section className="metrics-row">

@@ -56,8 +56,8 @@ TEST_YEARS = list(range(2023, 2026))   # 2023-2025 (3 years)
 # Training Hyperparameters
 BATCH_SIZE = 16
 LEARNING_RATE = 1e-3
-EPOCHS = 25
-EARLY_STOPPING_PATIENCE = 7
+EPOCHS = 20
+EARLY_STOPPING_PATIENCE = 4
 
 # Flask API config
 API_HOST = "0.0.0.0"

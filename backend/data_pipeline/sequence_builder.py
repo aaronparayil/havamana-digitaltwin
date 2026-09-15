@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import config
+from data_pipeline.calendar_features import build_calendar_sequences
 
 
 def create_sliding_sequences(
@@ -18,81 +19,97 @@ def create_sliding_sequences(
     dates: pd.DatetimeIndex,
     seq_len_in: int = config.SEQ_LEN_IN,
     seq_len_out: int = config.SEQ_LEN_OUT
-) -> Tuple[np.ndarray, np.ndarray, pd.DatetimeIndex, pd.DatetimeIndex]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DatetimeIndex, pd.DatetimeIndex]:
     """
-    Creates sliding-window sequences from multi-channel spatiotemporal tensor.
-    
+    Creates sliding-window sequences from multi-channel spatiotemporal tensor,
+    paired with (sin, cos) day-of-year calendar encodings for the input window
+    and the forecast horizon (used to condition the model on seasonality and
+    lead-time instead of relying solely on the raw 30-day history).
+
     Parameters:
     - data: shape (T, H, W, C)
     - dates: DatetimeIndex of length T
-    
+
     Returns:
     - X: shape (N, seq_len_in, H, W, C)
     - Y: shape (N, seq_len_out, H, W, C)
+    - Cal_in: shape (N, seq_len_in, 2) - calendar encoding aligned with X
+    - Cal_out: shape (N, seq_len_out, 2) - calendar encoding aligned with Y
     - target_start_dates: start date for each forecast target sequence
     - target_end_dates: end date for each forecast target sequence
     """
     total_time = len(data)
     num_samples = total_time - seq_len_in - seq_len_out + 1
-    
+
     h, w, c = data.shape[1], data.shape[2], data.shape[3]
-    
+    calendar_full = build_calendar_sequences(dates, seq_len_in, seq_len_out)  # (T, 2)
+
     X = np.zeros((num_samples, seq_len_in, h, w, c), dtype=np.float32)
     Y = np.zeros((num_samples, seq_len_out, h, w, c), dtype=np.float32)
-    
+    Cal_in = np.zeros((num_samples, seq_len_in, 2), dtype=np.float32)
+    Cal_out = np.zeros((num_samples, seq_len_out, 2), dtype=np.float32)
+
     target_start_dates = []
     target_end_dates = []
-    
+
     for i in range(num_samples):
         X[i] = data[i : i + seq_len_in]
         Y[i] = data[i + seq_len_in : i + seq_len_in + seq_len_out]
+        Cal_in[i] = calendar_full[i : i + seq_len_in]
+        Cal_out[i] = calendar_full[i + seq_len_in : i + seq_len_in + seq_len_out]
         target_start_dates.append(dates[i + seq_len_in])
         target_end_dates.append(dates[i + seq_len_in + seq_len_out - 1])
-        
-    return X, Y, pd.DatetimeIndex(target_start_dates), pd.DatetimeIndex(target_end_dates)
+
+    return X, Y, Cal_in, Cal_out, pd.DatetimeIndex(target_start_dates), pd.DatetimeIndex(target_end_dates)
 
 
 def split_chronologically(
     X: np.ndarray,
     Y: np.ndarray,
+    Cal_in: np.ndarray,
+    Cal_out: np.ndarray,
     target_start_dates: pd.DatetimeIndex,
     train_years: List[int] = config.TRAIN_YEARS,
     val_years: List[int] = config.VAL_YEARS,
     test_years: List[int] = config.TEST_YEARS
-) -> Dict[str, Tuple[np.ndarray, np.ndarray, pd.DatetimeIndex]]:
+) -> Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, pd.DatetimeIndex]]:
     """
-    Splits the spatiotemporal sequences chronologically based on the forecast target year.
+    Splits the spatiotemporal sequences (and their calendar encodings) chronologically
+    based on the forecast target year.
     """
     target_years = target_start_dates.year
-    
+
     train_mask = np.isin(target_years, train_years)
     val_mask = np.isin(target_years, val_years)
     test_mask = np.isin(target_years, test_years)
-    
+
     splits = {
-        "train": (X[train_mask], Y[train_mask], target_start_dates[train_mask]),
-        "val": (X[val_mask], Y[val_mask], target_start_dates[val_mask]),
-        "test": (X[test_mask], Y[test_mask], target_start_dates[test_mask])
+        "train": (X[train_mask], Y[train_mask], Cal_in[train_mask], Cal_out[train_mask], target_start_dates[train_mask]),
+        "val": (X[val_mask], Y[val_mask], Cal_in[val_mask], Cal_out[val_mask], target_start_dates[val_mask]),
+        "test": (X[test_mask], Y[test_mask], Cal_in[test_mask], Cal_out[test_mask], target_start_dates[test_mask])
     }
-    
+
     print(f"Data Splits Chronologically:")
     print(f"  Train ({train_years[0]}-{train_years[-1]}): {splits['train'][0].shape[0]} sequences")
     print(f"  Val   ({val_years[0]}-{val_years[-1]}):   {splits['val'][0].shape[0]} sequences")
     print(f"  Test  ({test_years[0]}-{test_years[-1]}):  {splits['test'][0].shape[0]} sequences")
-    
+
     return splits
 
 
 def get_tf_dataset(
     X: np.ndarray,
     Y: np.ndarray,
+    Cal_in: np.ndarray,
+    Cal_out: np.ndarray,
     batch_size: int = config.BATCH_SIZE,
     shuffle: bool = True
 ) -> tf.data.Dataset:
     """
     Converts numpy arrays into an optimized tf.data.Dataset with prefetching.
+    Model inputs are a 3-tuple: (historical_sequence, historical_calendar, future_calendar).
     """
-    ds = tf.data.Dataset.from_tensor_slices((X, Y))
+    ds = tf.data.Dataset.from_tensor_slices(((X, Cal_in, Cal_out), Y))
     if shuffle:
         ds = ds.shuffle(buffer_size=1024, seed=42)
     ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
