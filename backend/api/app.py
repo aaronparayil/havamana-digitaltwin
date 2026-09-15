@@ -12,8 +12,50 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import config
 from data_pipeline.preprocessor import prepare_full_pipeline, inverse_transform
 from data_pipeline.sequence_builder import create_sliding_sequences
-from models.convlstm_model import weighted_climate_loss
+from data_pipeline.calendar_features import encode_day_of_year
+from models.convlstm_model import WeightedClimateLoss, TemporalRepeat, BroadcastCalendar, LastTimestep, ClipToUnitRange
 from models.baselines import PersistenceBaseline, ClimatologyBaseline, LinearTrendBaseline
+
+KARNATAKA_CITIES = {
+    "Bengaluru (Pilot)": {"lat": 12.97, "lon": 77.59, "region": "South Interior Plateau", "y": 7, "x": 24},
+    "Mysuru":            {"lat": 12.30, "lon": 76.65, "region": "South Interior Valley",  "y": 4, "x": 18},
+    "Mangaluru":         {"lat": 12.91, "lon": 74.85, "region": "Coastal Karnataka",      "y": 6, "x": 6},
+    "Shivamogga":        {"lat": 13.93, "lon": 75.57, "region": "Malnad Western Ghats",  "y": 11, "x": 11},
+    "Hubballi-Dharwad":  {"lat": 15.36, "lon": 75.12, "region": "Central Transition",     "y": 17, "x": 8},
+    "Belagavi":          {"lat": 15.85, "lon": 74.50, "region": "North Western Border",  "y": 19, "x": 3},
+    "Kalaburagi":        {"lat": 17.33, "lon": 76.83, "region": "North Interior Semi-Arid", "y": 26, "x": 19}
+}
+
+
+def build_calendar_batch(hist_dates: pd.DatetimeIndex, future_dates: pd.DatetimeIndex):
+    """Builds a (1, seq_len_in, 2) / (1, seq_len_out, 2) calendar batch for model inference."""
+    cal_in = encode_day_of_year(hist_dates)[np.newaxis, ...].astype(np.float32)
+    cal_out = encode_day_of_year(future_dates)[np.newaxis, ...].astype(np.float32)
+    return cal_in, cal_out
+
+
+def get_next_occurrence(month: int, day: int, after_date: pd.Timestamp) -> pd.Timestamp:
+    """Returns the next real-calendar date with the given month/day that is >= after_date,
+    rolling over to next year if that date has already passed this year."""
+    try:
+        candidate = pd.Timestamp(year=after_date.year, month=month, day=day)
+    except ValueError:
+        candidate = pd.Timestamp(year=after_date.year, month=month, day=day - 1)  # Feb 29 fallback
+    if candidate < after_date.normalize():
+        candidate = get_next_occurrence(month, day, pd.Timestamp(year=after_date.year + 1, month=1, day=1))
+    return candidate
+
+
+def most_recent_historical_analog(dates: pd.DatetimeIndex, month: int, day: int) -> int:
+    """Finds the index in `dates` of the most recent past occurrence of the given month/day,
+    so a seasonally-appropriate 30-day input window can be sliced ending on a real observed date."""
+    matches = dates[(dates.month == month) & (dates.day == day)]
+    if len(matches) == 0:
+        # Leap-day or no exact match: fall back to nearest day-of-year
+        target_doy = pd.Timestamp(year=2001, month=month, day=min(day, 28)).dayofyear
+        doy_diff = np.abs(dates.dayofyear - target_doy)
+        return int(np.argmin(doy_diff))
+    return dates.get_loc(matches[-1])
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -44,7 +86,13 @@ def initialize_service():
         # Load ConvLSTM model if available
         if config.MODEL_SAVE_PATH.exists():
             print(f"[API]: Loading trained model from {config.MODEL_SAVE_PATH}")
-            custom_objects = {"weighted_climate_loss": weighted_climate_loss}
+            custom_objects = {
+                "WeightedClimateLoss": WeightedClimateLoss,
+                "TemporalRepeat": TemporalRepeat,
+                "BroadcastCalendar": BroadcastCalendar,
+                "LastTimestep": LastTimestep,
+                "ClipToUnitRange": ClipToUnitRange
+            }
             MODEL = tf.keras.models.load_model(config.MODEL_SAVE_PATH, custom_objects=custom_objects)
             print("[API]: Model loaded successfully!")
         else:
@@ -87,17 +135,9 @@ def get_spatial_metadata():
     """Returns latitudes, longitudes, land mask, and key city coordinates."""
     lats = np.linspace(config.LAT_MIN, config.LAT_MAX, config.GRID_HEIGHT).tolist()
     lons = np.linspace(config.LON_MIN, config.LON_MAX, config.GRID_WIDTH).tolist()
-    
-    cities = {
-        "Bengaluru (Pilot)": {"lat": 12.97, "lon": 77.59, "region": "South Interior Plateau", "y": 7, "x": 24},
-        "Mysuru":            {"lat": 12.30, "lon": 76.65, "region": "South Interior Valley",  "y": 4, "x": 18},
-        "Mangaluru":         {"lat": 12.91, "lon": 74.85, "region": "Coastal Karnataka",      "y": 6, "x": 6},
-        "Shivamogga":        {"lat": 13.93, "lon": 75.57, "region": "Malnad Western Ghats",  "y": 11, "x": 11},
-        "Hubballi-Dharwad":  {"lat": 15.36, "lon": 75.12, "region": "Central Transition",     "y": 17, "x": 8},
-        "Belagavi":          {"lat": 15.85, "lon": 74.50, "region": "North Western Border",  "y": 19, "x": 3},
-        "Kalaburagi":        {"lat": 17.33, "lon": 76.83, "region": "North Interior Semi-Arid", "y": 26, "x": 19}
-    }
-    
+
+    cities = KARNATAKA_CITIES
+
     mask = LAND_MASK.tolist() if LAND_MASK is not None else [[1.0]*config.GRID_WIDTH]*config.GRID_HEIGHT
     
     return jsonify({
@@ -138,48 +178,60 @@ def get_forecast_by_date():
     """
     date_str = request.args.get("date")
     if not date_str:
-        # Default to a prominent monsoon test date
-        date_str = "2024-07-15"
-        
+        # Default to today so the picker always opens on a live, current-dated forecast
+        date_str = pd.Timestamp.now().normalize().strftime("%Y-%m-%d")
+
     try:
         req_date = pd.to_datetime(date_str)
     except Exception:
         return jsonify({"error": f"Invalid date format: {date_str}. Use YYYY-MM-DD"}), 400
-        
+
     if DATES is None or len(DATES) == 0:
         return jsonify({"error": "Dataset not loaded"}), 500
-        
-    # Find matching date index
+
+    min_selectable = DATES[config.SEQ_LEN_IN]
+    if req_date < min_selectable:
+        return jsonify({
+            "error": f"Date {date_str} requires at least 30 preceding days of history; earliest selectable date is {min_selectable.strftime('%Y-%m-%d')}"
+        }), 400
+
+    # Find matching date index within the recorded dataset (2010-01-01 through the latest IMD data)
     try:
         target_idx = DATES.get_loc(req_date)
     except KeyError:
-        return jsonify({
-            "error": f"Date {date_str} not in dataset range [{DATES[0].strftime('%Y-%m-%d')} to {DATES[-1].strftime('%Y-%m-%d')}]"
-        }), 400
-        
-    # We need 30 days of history before target_idx
-    if target_idx < config.SEQ_LEN_IN:
-        return jsonify({"error": f"Date {date_str} requires at least 30 preceding days in dataset"}), 400
-        
-    # Input sequence (1, 30, H, W, 3)
-    input_seq = NORMALIZED_TENSOR[target_idx - config.SEQ_LEN_IN : target_idx]
+        target_idx = None
+
+    if target_idx is not None:
+        # Historical date: use the real observed 30-day window immediately preceding it
+        input_seq = NORMALIZED_TENSOR[target_idx - config.SEQ_LEN_IN : target_idx]
+        hist_dates = DATES[target_idx - config.SEQ_LEN_IN : target_idx]
+    else:
+        # Future date beyond the recorded dataset: ground the input in the most recent
+        # real observations from this same calendar window (same month/day, prior year),
+        # so the forecast reflects the correct season for the requested date.
+        analog_idx = most_recent_historical_analog(DATES, req_date.month, req_date.day)
+        base_idx = min(analog_idx + 1, len(DATES))
+        input_seq = NORMALIZED_TENSOR[base_idx - config.SEQ_LEN_IN : base_idx]
+        hist_dates = DATES[base_idx - config.SEQ_LEN_IN : base_idx]
+
     input_seq_batch = np.expand_dims(input_seq, axis=0)  # (1, 30, H, W, 3)
-    
-    # 14 future dates
+
+    # 14 future dates (always the real dates the user asked for, regardless of input source)
     forecast_dates = pd.date_range(start=req_date, periods=config.SEQ_LEN_OUT, freq="D")
     forecast_date_strs = [d.strftime("%Y-%m-%d") for d in forecast_dates]
-    
-    # Actual future values if within dataset
-    has_actual = (target_idx + config.SEQ_LEN_OUT <= len(NORMALIZED_TENSOR))
+    cal_in_batch, cal_out_batch = build_calendar_batch(hist_dates, forecast_dates)
+
+    # Actual recorded values, only available when the full 14-day window falls within the dataset
+    has_actual = (target_idx is not None) and (target_idx + config.SEQ_LEN_OUT <= len(NORMALIZED_TENSOR))
     if has_actual:
         actual_norm = NORMALIZED_TENSOR[target_idx : target_idx + config.SEQ_LEN_OUT]  # (14, H, W, 3)
         actual_phys = inverse_transform(actual_norm, SCALERS)
     else:
         actual_phys = None
-        
+
     # Run ConvLSTM prediction
     if MODEL is not None:
-        pred_norm = MODEL.predict(input_seq_batch, verbose=0)[0]  # (14, H, W, 3)
+        pred_norm = MODEL.predict([input_seq_batch, cal_in_batch, cal_out_batch], verbose=0)[0]  # (14, H, W, 3)
     else:
         # High-fidelity fallback / persistence + climatology blended simulation
         pers = PersistenceBaseline().predict(input_seq_batch)[0]
@@ -219,15 +271,9 @@ def get_forecast_by_date():
             }
         days_data.append(day_info)
         
-    # City point extractions
-    city_coords = {
-        "Bengaluru (Pilot)": {"y": 6, "x": 10},
-        "New Delhi": {"y": 22, "x": 10},
-        "Mumbai": {"y": 12, "x": 5},
-        "Kolkata": {"y": 15, "x": 21},
-        "Chennai": {"y": 6, "x": 13}
-    }
-    
+    # City point extractions (Karnataka pilot grid only)
+    city_coords = KARNATAKA_CITIES
+
     city_forecasts = {}
     for city, coord in city_coords.items():
         cy, cx = coord["y"], coord["x"]
@@ -240,7 +286,9 @@ def get_forecast_by_date():
             "actual_tmax": [round(float(actual_phys[d, cy, cx, 1]), 2) for d in range(config.SEQ_LEN_OUT)] if actual_phys is not None else None,
             "actual_tmin": [round(float(actual_phys[d, cy, cx, 2]), 2) for d in range(config.SEQ_LEN_OUT)] if actual_phys is not None else None,
             "persistence_tmax": [round(float(pers_phys[d, cy, cx, 1]), 2) for d in range(config.SEQ_LEN_OUT)],
-            "climatology_tmax": [round(float(clim_phys[d, cy, cx, 1]), 2) for d in range(config.SEQ_LEN_OUT)]
+            "climatology_rainfall": [round(float(clim_phys[d, cy, cx, 0]), 2) for d in range(config.SEQ_LEN_OUT)],
+            "climatology_tmax": [round(float(clim_phys[d, cy, cx, 1]), 2) for d in range(config.SEQ_LEN_OUT)],
+            "climatology_tmin": [round(float(clim_phys[d, cy, cx, 2]), 2) for d in range(config.SEQ_LEN_OUT)]
         }
         
     return jsonify({
@@ -268,43 +316,48 @@ def get_future_forecast():
     if NORMALIZED_TENSOR is None or DATES is None:
         return jsonify({"error": "Dataset not loaded"}), 500
 
-    # Determine base historical sequence based on future scenario (Karnataka climate regimes)
-    if scenario in ["upcoming_monsoon", "monsoon_surge"]:
-        # Target dates: July 1 to July 14 (Southwest Monsoon Surge - Western Ghats / Coastal Peak)
-        future_start = pd.Timestamp("2026-07-01")
-        target_dates_hist = DATES[(DATES.month == 6) & (DATES.day == 30)]
-        base_idx = DATES.get_loc(target_dates_hist[-1])
-        input_seq = NORMALIZED_TENSOR[base_idx - config.SEQ_LEN_IN : base_idx]
-    elif scenario in ["upcoming_summer", "north_heatwave"]:
-        # Target dates: May 10 to May 23 (North Karnataka Heatwave - Kalaburagi / Semi-Arid)
-        future_start = pd.Timestamp("2026-05-10")
-        target_dates_hist = DATES[(DATES.month == 5) & (DATES.day == 9)]
-        base_idx = DATES.get_loc(target_dates_hist[-1])
-        input_seq = NORMALIZED_TENSOR[base_idx - config.SEQ_LEN_IN : base_idx]
-    elif scenario in ["post_monsoon", "bengaluru_showers"]:
-        # Target dates: Oct 15 to Oct 28 (Northeast / Post-Monsoon Showers - Bengaluru / South Interior)
-        future_start = pd.Timestamp("2026-10-15")
-        target_dates_hist = DATES[(DATES.month == 10) & (DATES.day == 14)]
-        base_idx = DATES.get_loc(target_dates_hist[-1])
-        input_seq = NORMALIZED_TENSOR[base_idx - config.SEQ_LEN_IN : base_idx]
-    elif scenario in ["upcoming_winter", "winter_chill"]:
-        # Target dates: Dec 20 to Jan 2 (Winter cool front in Kodagu / Plateau)
-        future_start = pd.Timestamp("2026-12-20")
-        target_dates_hist = DATES[(DATES.month == 12) & (DATES.day == 19)]
-        base_idx = DATES.get_loc(target_dates_hist[-1])
-        input_seq = NORMALIZED_TENSOR[base_idx - config.SEQ_LEN_IN : base_idx]
-    else:
-        # Default: 'immediate' forward rollout into the future from latest observations
-        future_start = DATES[-1] + pd.Timedelta(days=1)
-        input_seq = NORMALIZED_TENSOR[-config.SEQ_LEN_IN :]
+    # Always anchor "future" relative to the real current date, never a stale hardcoded one.
+    today = pd.Timestamp.now().normalize()
 
+    # Determine base historical sequence based on future scenario (Karnataka climate regimes).
+    # Each scenario's 14-day window always starts at the NEXT upcoming occurrence of its
+    # seasonal target date on or after today, and is grounded in the most recent real
+    # observations from that same time of year (so the input reflects the correct season).
+    if scenario in ["upcoming_monsoon", "monsoon_surge"]:
+        # Southwest Monsoon Surge - Western Ghats / Coastal Peak
+        future_start = get_next_occurrence(7, 1, today)
+        base_idx = most_recent_historical_analog(DATES, 6, 30) + 1
+    elif scenario in ["upcoming_summer", "north_heatwave"]:
+        # North Karnataka Heatwave - Kalaburagi / Semi-Arid
+        future_start = get_next_occurrence(5, 10, today)
+        base_idx = most_recent_historical_analog(DATES, 5, 9) + 1
+    elif scenario in ["post_monsoon", "bengaluru_showers"]:
+        # Northeast / Post-Monsoon Showers - Bengaluru / South Interior
+        future_start = get_next_occurrence(10, 15, today)
+        base_idx = most_recent_historical_analog(DATES, 10, 14) + 1
+    elif scenario in ["upcoming_winter", "winter_chill"]:
+        # Winter cool front in Kodagu / Plateau
+        future_start = get_next_occurrence(12, 20, today)
+        base_idx = most_recent_historical_analog(DATES, 12, 19) + 1
+    else:
+        # Default: 'immediate' 14-day lookahead starting tomorrow, grounded in the most
+        # recent real observations from this same calendar window (same month/day) so the
+        # forecast reflects the correct season for "right now" rather than replaying
+        # whatever happens to be the last recorded day in the dataset.
+        future_start = today + pd.Timedelta(days=1)
+        analog_idx = most_recent_historical_analog(DATES, today.month, today.day)
+        base_idx = min(analog_idx + 1, len(DATES))
+
+    input_seq = NORMALIZED_TENSOR[base_idx - config.SEQ_LEN_IN : base_idx]
+    hist_dates = DATES[base_idx - config.SEQ_LEN_IN : base_idx]
     input_seq_batch = np.expand_dims(input_seq, axis=0)  # (1, 30, 32, 32, 3)
     future_dates = pd.date_range(start=future_start, periods=config.SEQ_LEN_OUT, freq="D")
     future_date_strs = [d.strftime("%Y-%m-%d") for d in future_dates]
+    cal_in_batch, cal_out_batch = build_calendar_batch(hist_dates, future_dates)
 
     # Predict future using ConvLSTM model
     if MODEL is not None:
-        pred_norm = MODEL.predict(input_seq_batch, verbose=0)[0]
+        pred_norm = MODEL.predict([input_seq_batch, cal_in_batch, cal_out_batch], verbose=0)[0]
     else:
         pers = PersistenceBaseline().predict(input_seq_batch)[0]
         clim = CLIMATOLOGY_MODEL.predict_for_dates(pd.DatetimeIndex([future_start]), 1)[0]
@@ -353,15 +406,7 @@ def get_future_forecast():
         })
 
     # Karnataka City Future Trajectories
-    city_coords = {
-        "Bengaluru (Pilot)": {"y": 7, "x": 24},
-        "Mysuru":            {"y": 4, "x": 18},
-        "Mangaluru":         {"y": 6, "x": 6},
-        "Shivamogga":        {"y": 11, "x": 11},
-        "Hubballi-Dharwad":  {"y": 17, "x": 8},
-        "Belagavi":          {"y": 19, "x": 3},
-        "Kalaburagi":        {"y": 26, "x": 19}
-    }
+    city_coords = KARNATAKA_CITIES
 
     city_forecasts = {}
     for city, coord in city_coords.items():
@@ -414,9 +459,17 @@ def on_demand_predict():
             # Expect shape: (30, H, W, 3) or (1, 30, H, W, 3)
             if seq_array.ndim == 4:
                 seq_array = np.expand_dims(seq_array, axis=0)
-                
+
+            # Calendar context: caller may pass the calendar date of the last historical
+            # day ("end_date"); otherwise assume it is the most recent date in the dataset.
+            end_date_str = payload.get("end_date")
+            end_date = pd.to_datetime(end_date_str) if end_date_str else DATES[-1]
+            hist_dates = pd.date_range(end=end_date, periods=seq_array.shape[1], freq="D")
+            future_dates = pd.date_range(start=end_date + pd.Timedelta(days=1), periods=config.SEQ_LEN_OUT, freq="D")
+            cal_in_batch, cal_out_batch = build_calendar_batch(hist_dates, future_dates)
+
             if MODEL is not None:
-                pred_norm = MODEL.predict(seq_array, verbose=0)[0]
+                pred_norm = MODEL.predict([seq_array, cal_in_batch, cal_out_batch], verbose=0)[0]
             else:
                 pred_norm = PersistenceBaseline().predict(seq_array)[0]
                 

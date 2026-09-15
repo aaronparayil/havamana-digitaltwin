@@ -32,9 +32,9 @@ def main():
     # 1. Prepare Data Pipeline
     ds, normalized_tensor, land_mask, scalers = prepare_full_pipeline(force_recompute=args.force_recompute)
 
-    # 2. Build Spatiotemporal Sliding Sequences
+    # 2. Build Spatiotemporal Sliding Sequences (with day-of-year calendar encodings)
     print("\nBuilding sliding temporal sequences (30 days in -> 14 days out)...")
-    X, Y, target_start_dates, target_end_dates = create_sliding_sequences(
+    X, Y, Cal_in, Cal_out, target_start_dates, target_end_dates = create_sliding_sequences(
         normalized_tensor,
         ds.time.to_index(),
         seq_len_in=config.SEQ_LEN_IN,
@@ -42,23 +42,23 @@ def main():
     )
 
     # 3. Chronological Splits (Train: 2010-2020, Val: 2021-2022, Test: 2023-2025)
-    splits = split_chronologically(X, Y, target_start_dates)
-    X_train, Y_train, _ = splits["train"]
-    X_val, Y_val, _ = splits["val"]
+    splits = split_chronologically(X, Y, Cal_in, Cal_out, target_start_dates)
+    X_train, Y_train, Cal_in_train, Cal_out_train, _ = splits["train"]
+    X_val, Y_val, Cal_in_val, Cal_out_val, _ = splits["val"]
 
     epochs = 2 if args.quick_test else args.epochs
     batch_size = args.batch_size
 
     if args.quick_test:
         print("\n[QUICK TEST MODE]: Subsampling data for fast execution verification...")
-        X_train, Y_train = X_train[:64], Y_train[:64]
-        X_val, Y_val = X_val[:32], Y_val[:32]
+        X_train, Y_train, Cal_in_train, Cal_out_train = X_train[:64], Y_train[:64], Cal_in_train[:64], Cal_out_train[:64]
+        X_val, Y_val, Cal_in_val, Cal_out_val = X_val[:32], Y_val[:32], Cal_in_val[:32], Cal_out_val[:32]
 
     # 4. Train ConvLSTM Model
-    trainer = ClimateModelTrainer(save_path=config.MODEL_SAVE_PATH)
+    trainer = ClimateModelTrainer(save_path=config.MODEL_SAVE_PATH, land_mask=land_mask)
     trainer.train(
-        train_data=(X_train, Y_train),
-        val_data=(X_val, Y_val),
+        train_data=(X_train, Y_train, Cal_in_train, Cal_out_train),
+        val_data=(X_val, Y_val, Cal_in_val, Cal_out_val),
         epochs=epochs,
         batch_size=batch_size,
         patience=config.EARLY_STOPPING_PATIENCE

@@ -7,6 +7,8 @@ import { Analytics } from './pages/Analytics'
 import { Data } from './pages/Data'
 import { Reports } from './pages/Reports'
 import { ModelSimulation } from './pages/ModelSimulation'
+import { Comparisons } from './pages/Comparisons'
+import { Scenarios } from './pages/Scenarios'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 
@@ -42,12 +44,9 @@ function App() {
             </button>
             <span className="coming-soon-tip">Coming soon</span>
           </div>
-          <div className="nav-item-wrap">
-            <button className="nav-item disabled">
-              <BarChart3 size={18} /> Comparisons
-            </button>
-            <span className="coming-soon-tip">Coming soon</span>
-          </div>
+          <Link className={`nav-item ${location.pathname === '/comparisons' ? 'active' : ''}`} to="/comparisons" onClick={() => setSidebarOpen(false)}>
+            <BarChart3 size={18} /> Comparisons
+          </Link>
         </nav>
         <div className="side-label second">AI Models & Tools</div>
         <nav>
@@ -60,12 +59,9 @@ function App() {
             </button>
             <span className="coming-soon-tip">Coming soon</span>
           </div>
-          <div className="nav-item-wrap">
-            <button className="nav-item disabled">
-              <Settings2 size={18} /> Scenarios
-            </button>
-            <span className="coming-soon-tip">Coming soon</span>
-          </div>
+          <Link className={`nav-item ${location.pathname === '/scenarios' ? 'active' : ''}`} to="/scenarios" onClick={() => setSidebarOpen(false)}>
+            <Settings2 size={18} /> Scenarios
+          </Link>
         </nav>
         <div className="sidebar-foot">
           <div className="signal-dot" />
@@ -91,6 +87,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/model-test" element={<ModelSimulation />} />
+          <Route path="/comparisons" element={<Comparisons />} />
+          <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/data" element={<Data />} />
           <Route path="/reports" element={<Reports />} />

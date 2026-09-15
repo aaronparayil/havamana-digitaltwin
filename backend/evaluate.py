@@ -19,7 +19,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 import config
 from data_pipeline.preprocessor import prepare_full_pipeline, inverse_transform
 from data_pipeline.sequence_builder import create_sliding_sequences, split_chronologically
-from models.convlstm_model import weighted_climate_loss, TemporalRepeat
+from models.convlstm_model import WeightedClimateLoss, TemporalRepeat, BroadcastCalendar, LastTimestep, ClipToUnitRange
 from models.baselines import PersistenceBaseline, ClimatologyBaseline, LinearTrendBaseline
 from evaluation.metrics import compute_comprehensive_metrics
 from evaluation.visualizations import (
@@ -41,14 +41,14 @@ def main():
     dates = ds.time.to_index()
 
     # 2. Build sequences and test split
-    X, Y, target_start_dates, target_end_dates = create_sliding_sequences(
+    X, Y, Cal_in, Cal_out, target_start_dates, target_end_dates = create_sliding_sequences(
         normalized_tensor,
         dates,
         seq_len_in=config.SEQ_LEN_IN,
         seq_len_out=config.SEQ_LEN_OUT
     )
-    splits = split_chronologically(X, Y, target_start_dates)
-    X_test, Y_test, test_dates = splits["test"]
+    splits = split_chronologically(X, Y, Cal_in, Cal_out, target_start_dates)
+    X_test, Y_test, Cal_in_test, Cal_out_test, test_dates = splits["test"]
 
     print(f"\nEvaluating on {X_test.shape[0]} test sequences across {config.SEQ_LEN_OUT}-day lookaheads.")
 
@@ -59,12 +59,18 @@ def main():
         return
 
     print(f"Loading trained ConvLSTM model from: {config.MODEL_SAVE_PATH}...")
-    custom_objects = {"weighted_climate_loss": weighted_climate_loss}
+    custom_objects = {
+        "WeightedClimateLoss": WeightedClimateLoss,
+        "TemporalRepeat": TemporalRepeat,
+        "BroadcastCalendar": BroadcastCalendar,
+        "LastTimestep": LastTimestep,
+        "ClipToUnitRange": ClipToUnitRange
+    }
     model = tf.keras.models.load_model(config.MODEL_SAVE_PATH, custom_objects=custom_objects)
 
     # 4. Run Model Predictions
     print("Running ConvLSTM2D inference...")
-    y_pred_convlstm = model.predict(X_test, batch_size=config.BATCH_SIZE, verbose=1)
+    y_pred_convlstm = model.predict([X_test, Cal_in_test, Cal_out_test], batch_size=config.BATCH_SIZE, verbose=1)
 
     # 5. Run Baseline Models
     print("Running Baseline Models for benchmark comparison...")
