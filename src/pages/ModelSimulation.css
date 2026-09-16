@@ -1,172 +1,285 @@
-/* Model Simulation Page Styles */
+/* ==========================================================================
+   Model Simulation — the forecasting workbench
+   --------------------------------------------------------------------------
+   Shared by ModelSimulation, Comparisons and Scenarios. All values come from
+   styles/tokens.css.
+
+   Legend gradients are NOT defined here. They are generated at render time
+   from styles/dataColors.js, so a swatch can never disagree with the colour
+   the map actually paints.
+   ========================================================================== */
+
 .sim-wrap {
-  max-width: 1440px;
-  padding: 36px 4% 60px;
-  margin: auto;
+  max-width: var(--content-max);
+  width: 100%;
+  padding: var(--space-7) var(--space-7) var(--space-10);
+  margin: 0 auto;
 }
+
+/* ================================================================= header */
 
 .sim-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .sim-badge-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .sim-badge {
-  background: #173c3a;
-  color: #a9c0b8;
-  font: 600 10px/1 'DM Mono', monospace;
-  padding: 5px 9px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-secondary);
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-sm);
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sim-badge i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .sim-badge.active {
-  background: #deeee1;
-  color: #2b8a72;
+  background: var(--accent-sunk);
+  border-color: transparent;
+  color: var(--accent);
 }
 
-.sim-badge.active i {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #2b8a72;
-  margin-right: 5px;
+/* Data-provenance badges. These carry real meaning — whether the numbers on
+   screen came from the model or from a local stand-in — so they use status
+   colours and always ship with an icon and a word, never colour alone. */
+.sim-badge.is-live {
+  background: var(--status-good-sunk);
+  border-color: transparent;
+  color: var(--status-good);
+}
+
+.sim-badge.is-demo {
+  background: var(--status-warning-sunk);
+  border-color: var(--status-warning);
+  color: var(--status-warning);
 }
 
 .sim-title {
-  font: 600 clamp(26px, 2.8vw, 38px)/1.1 Fraunces, serif;
-  margin: 4px 0 6px;
+  font: var(--text-display);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-2);
   color: var(--ink);
 }
 
 .sim-subtitle {
-  color: #78847e;
-  font-size: 13px;
+  color: var(--ink-secondary);
+  font: var(--text-small);
+  max-width: 70ch;
 }
 
-.sim-controls-bar {
-  background: var(--panel);
+/* ============================================ demo-mode warning banner ====
+   When the API is unreachable the page falls back to a synthetic generator.
+   That must be impossible to mistake for model output. */
+
+.demo-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--status-warning-sunk);
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.demo-banner svg {
+  color: var(--status-warning);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.demo-banner strong {
+  color: var(--status-warning);
+  font-weight: 600;
+}
+
+.demo-banner code {
+  font: 400 12px/1 var(--font-mono);
+  background: var(--surface-sunk);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 16px 20px;
-  margin-bottom: 22px;
+  border-radius: 3px;
+  padding: 2px 5px;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+/* ================================================== controls (filter row)
+   One filter row above everything it scopes — never per-card filters. */
+
+.sim-controls-bar {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  box-shadow: 0 2px 8px rgba(23, 60, 58, 0.03);
+  gap: var(--space-4);
 }
 
 .control-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
 .control-label {
-  font: 600 11px/1 'DM Mono', monospace;
+  font: var(--text-label);
   text-transform: uppercase;
-  color: #78847e;
-  letter-spacing: 0.5px;
+  color: var(--ink-muted);
+  letter-spacing: var(--label-spacing);
 }
 
 .pill-group {
   display: inline-flex;
-  background: #ebe7de;
+  background: var(--surface-sunk);
   padding: 3px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  gap: 2px;
 }
 
 .pill-btn {
   border: 0;
   background: transparent;
-  padding: 6px 12px;
+  padding: 6px var(--space-3);
   font-size: 12px;
   font-weight: 500;
-  color: #5f7069;
-  border-radius: 4px;
-  transition: all 0.15s ease;
+  color: var(--ink-secondary);
+  border-radius: 5px;
+  transition: background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+
+.pill-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
 .pill-btn.active {
-  background: #173c3a;
-  color: #fffdf8;
+  background: var(--accent);
+  color: var(--ink-inverse);
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .preset-btn {
   border: 1px solid var(--line);
-  background: var(--paper);
-  color: var(--ink);
-  padding: 6px 11px;
-  font-size: 11px;
-  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--ink-secondary);
+  padding: 6px var(--space-3);
+  font-size: 12px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.15s;
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
 .preset-btn:hover {
-  background: #ebe6da;
-  border-color: #c9c3b4;
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
 
 .preset-btn.active {
-  border-color: #2b8a72;
-  background: #deeee1;
-  color: #173c3a;
+  border-color: var(--accent);
+  background: var(--accent-sunk);
+  color: var(--accent);
   font-weight: 600;
 }
 
-.date-input {
+.date-input,
+.city-select {
   border: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--surface-2);
   color: var(--ink);
-  padding: 6px 10px;
-  font-family: 'DM Mono', monospace;
+  padding: 7px var(--space-3);
   font-size: 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
-/* Timeline scrubber */
+.date-input {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.city-select {
+  font-weight: 500;
+}
+
+.date-input:hover,
+.city-select:hover {
+  border-color: var(--line-strong);
+}
+
+.date-input:focus,
+.city-select:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: var(--glow-accent);
+}
+
+/* ====================================================== timeline scrubber */
+
 .timeline-card {
-  background: var(--panel);
+  background: var(--surface-1);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 16px 22px;
-  margin-bottom: 22px;
+  border-radius: var(--radius);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
 }
 
 .timeline-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .timeline-playback {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .play-btn {
@@ -174,30 +287,34 @@
   height: 34px;
   border-radius: 50%;
   border: 0;
-  background: #2b8a72;
-  color: white;
+  background: var(--accent);
+  color: var(--ink-inverse);
   display: grid;
   place-items: center;
-  transition: transform 0.1s;
+  flex: 0 0 34px;
+  transition: background var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
 }
 
 .play-btn:hover {
+  background: var(--accent-hover);
   transform: scale(1.06);
-  background: #22735e;
 }
 
 .timeline-slider-wrap {
   position: relative;
-  margin-top: 8px;
+  margin-top: var(--space-2);
 }
 
 .timeline-slider {
   width: 100%;
   height: 6px;
   border-radius: 3px;
-  background: #e6e2d8;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
   outline: none;
   -webkit-appearance: none;
+  appearance: none;
   cursor: pointer;
 }
 
@@ -207,58 +324,101 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #d16f43;
-  border: 2px solid #fff;
+  background: var(--accent-warm);
+  border: 2px solid var(--surface-1);
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+.timeline-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-warm);
+  border: 2px solid var(--surface-1);
+  cursor: pointer;
+}
+
+.timeline-slider:focus-visible {
+  box-shadow: var(--glow-accent);
 }
 
 .timeline-ticks {
   display: flex;
   justify-content: space-between;
-  margin-top: 8px;
-  font: 10px 'DM Mono', monospace;
-  color: #8c9790;
+  margin-top: var(--space-2);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .timeline-ticks span.active {
-  color: #d16f43;
-  font-weight: 700;
+  color: var(--accent-warm);
+  font-weight: 600;
 }
 
-/* Main Grid Layout */
+/* ============================================================ main layout */
+
 .sim-main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
-  gap: 20px;
-  margin-bottom: 22px;
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.map-card,
+.chart-card {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .map-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
-.map-card-header {
-  padding: 16px 20px;
+.map-card-header,
+.chart-card-header {
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
+.map-card-header h3,
+.chart-card-header h3 {
+  font: var(--text-h3);
+  color: var(--ink);
+  margin: 0;
+}
+
+.map-card-header .card-sub,
+.chart-card-header .card-sub {
+  display: block;
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-top: 4px;
+}
+
+/* The grid well — deliberately the darkest plane in the app so the data
+   raster is the brightest thing on screen. */
 .map-canvas-container {
   height: 440px;
   position: relative;
-  background: #112826;
+  background: var(--surface-sunk);
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--space-4);
 }
 
 .raster-grid-svg {
@@ -266,202 +426,528 @@
   height: 100%;
   max-width: 440px;
   max-height: 440px;
+  overflow: visible;
+}
+
+.raster-grid-svg rect {
+  transition: opacity var(--dur-fast) var(--ease);
 }
 
 .pixel-hover-info {
   position: absolute;
-  bottom: 14px;
-  left: 14px;
-  background: rgba(23, 60, 58, 0.92);
-  color: #fffdf8;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font: 11px 'DM Mono', monospace;
+  bottom: var(--space-3);
+  left: var(--space-3);
+  background: var(--chart-tooltip-bg);
+  color: var(--ink);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font: 400 11px/1.5 var(--font-mono);
+  font-variant-numeric: tabular-nums;
   pointer-events: none;
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
 }
 
+.pixel-hover-info strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* City pins drawn over the raster. */
+.city-pin {
+  fill: var(--ink);
+  stroke: var(--surface-sunk);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.city-pin-label {
+  fill: var(--ink);
+  font: 500 8px var(--font-sans);
+  paint-order: stroke;
+  stroke: var(--surface-sunk);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* ================================================================ legend */
+
 .legend-bar-wrap {
-  padding: 12px 20px;
-  background: var(--paper);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface-1);
   border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font: 11px 'DM Mono', monospace;
-  color: #6d7b73;
+  gap: var(--space-3);
+  font: 400 11px/1 var(--font-mono);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
 }
 
+/* Stepped, not smooth: the map bins values, so a smooth legend would
+   misdescribe the encoding. The gradient itself is supplied inline from
+   dataColors.js. */
 .legend-gradient {
   height: 10px;
-  width: 180px;
-  border-radius: 5px;
-  margin: 0 10px;
-}
-
-.legend-gradient.rainfall {
-  background: linear-gradient(to right, #f7fbff, #9ecae1, #4292c6, #08519c, #08306b);
-}
-
-.legend-gradient.tmax {
-  background: linear-gradient(to right, #ffffb2, #fecc5c, #fd8d3c, #f03b20, #bd0026);
-}
-
-.legend-gradient.tmin {
-  background: linear-gradient(to right, #313695, #74add1, #e0f3f8, #fdae61, #d73027);
-}
-
-.legend-gradient.error {
-  background: linear-gradient(to right, #ffffd4, #fed98e, #fe9929, #d95f0e, #993404);
-}
-
-.legend-gradient.anomaly {
-  background: linear-gradient(to right, #2563eb, #93c5fd, #fef08a, #f97316, #dc2626);
-}
-
-/* Time Series & Comparison Panel */
-.chart-card {
-  background: var(--panel);
+  flex: 1 1 140px;
+  min-width: 120px;
+  max-width: 220px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 20px;
+}
+
+.legend-mid-label {
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+
+/* ================================================================ charts */
+
+.chart-card {
+  padding: 0;
+}
+
+.chart-card-body {
+  padding: var(--space-4) var(--space-5) var(--space-5);
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
 
-.city-select {
-  border: 1px solid var(--line);
-  background: var(--paper);
-  color: var(--ink);
-  padding: 6px 10px;
-  font-size: 12px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-
+/* Sized to include the x-axis band, so axis labels never get cropped. */
 .chart-area {
   flex: 1;
-  min-height: 280px;
-  margin-top: 14px;
+  min-height: 290px;
+  margin-top: var(--space-3);
 }
 
-/* Metrics Section */
+/* ========================================================== stat tiles */
+
 .metrics-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 22px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
 .model-metric-card {
-  background: var(--panel);
+  background: var(--surface-1);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 18px 16px;
-  transition: transform 0.15s;
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  transition: border-color var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease);
 }
 
 .model-metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(23, 60, 58, 0.05);
+  border-color: var(--line-strong);
+  background: var(--surface-2);
 }
 
+/* A model's identity swatch. The colour comes from dataColors.js so the
+   tile, the chart line and the table row all agree. */
 .metric-badge {
-  font: 600 9px 'DM Mono', monospace;
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
   text-transform: uppercase;
-  padding: 3px 6px;
-  border-radius: 3px;
-  background: #e3efe0;
-  color: #2b8a72;
-  display: inline-block;
-  margin-bottom: 8px;
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: var(--space-3);
+}
+
+.metric-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex: 0 0 7px;
+  background: currentColor;
 }
 
 .metric-val-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: var(--space-2);
   margin: 6px 0;
 }
 
 .metric-val-row strong {
-  font: 600 24px Fraunces, serif;
+  font: var(--text-stat);
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
 .metric-val-row span {
-  font: 11px 'DM Mono', monospace;
-  color: #7b8780;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--ink-muted);
 }
 
 .metric-subtext {
-  font-size: 11px;
-  color: #6a7972;
+  font-size: 12px;
+  color: var(--ink-secondary);
   margin: 0;
+  line-height: 1.5;
 }
 
-/* Comparison Table */
+/* ======================================================= benchmark table */
+
 .benchmark-table-card {
-  background: var(--panel);
+  background: var(--surface-1);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
   overflow: hidden;
-  margin-bottom: 22px;
+  margin-bottom: var(--space-5);
+}
+
+.benchmark-table-wrap {
+  overflow-x: auto;
 }
 
 .benchmark-table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
+  /* Numbers in columns DO get tabular figures. */
+  font-variant-numeric: tabular-nums;
 }
 
 .benchmark-table th {
-  background: #ebe7de;
-  color: #5f7069;
-  font: 600 11px 'DM Mono', monospace;
+  background: var(--surface-2);
+  color: var(--ink-muted);
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
   text-transform: uppercase;
-  padding: 12px 16px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--line);
+  white-space: nowrap;
 }
 
 .benchmark-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eeeae2;
-  color: #4b5a54;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--ink-secondary);
+  white-space: nowrap;
 }
 
-.benchmark-table tr.highlight-row {
-  background: #f1f8f3;
+.benchmark-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.benchmark-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+.benchmark-table .model-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.benchmark-table .model-cell i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: 0 0 8px;
+}
+
+.benchmark-table tr.highlight-row td {
+  background: var(--accent-sunk);
+  color: var(--ink);
   font-weight: 600;
-  color: #173c3a;
 }
 
+/* Marks the best value in a column. Ships with a word, not just a colour. */
 .winner-tag {
-  background: #2b8a72;
-  color: white;
-  font: 600 9px 'DM Mono', monospace;
+  background: var(--status-good-sunk);
+  color: var(--status-good);
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
   padding: 2px 6px;
   border-radius: 3px;
   margin-left: 6px;
 }
 
-@media (max-width: 1024px) {
-  .sim-main-grid {
-    grid-template-columns: 1fr;
-  }
-  .metrics-row {
-    grid-template-columns: repeat(2, 1fr);
+/* ===================================================== shared text utilities
+   These exist so the pages stop reaching for inline styles. Every one of
+   them replaces a hardcoded light-mode literal that used to be repeated
+   across ModelSimulation, Comparisons and Scenarios. */
+
+.card-title {
+  font: 600 17px/1.3 var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 4px 0 0;
+}
+
+.card-meta {
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-meta.is-good {
+  color: var(--status-good);
+}
+
+.card-meta.is-warning {
+  color: var(--status-warning);
+}
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.scrub-readout {
+  font: 600 15px/1.2 var(--font-sans);
+  color: var(--ink);
+}
+
+.scrub-date {
+  margin-left: var(--space-2);
+  font: 400 11px/1 var(--font-mono);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inline explanatory note under a chart. */
+.context-note {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.context-note strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A metric that is worse than a baseline. Always accompanied by a label or
+   caption — never colour alone. */
+.val-poor {
+  color: var(--status-critical);
+}
+
+.val-good {
+  color: var(--status-good);
+}
+
+/* Lead-time summary strip under the benchmark table. */
+.lead-strip {
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.lead-strip .stat-label {
+  display: block;
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.lead-strip .stat-value {
+  font: 600 14px/1.4 var(--font-sans);
+  color: var(--ink);
+  margin-top: 3px;
+}
+
+.lead-strip .stat-sub {
+  font-size: 11px;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ================================================== states: loading/error */
+
+.sim-state-card {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sim-state-card.is-error {
+  border-color: var(--status-warning);
+  background: var(--status-warning-sunk);
+}
+
+.sim-state-card svg {
+  color: var(--ink-muted);
+}
+
+.sim-state-card.is-error svg {
+  color: var(--status-warning);
+}
+
+/* Refetch holds the previous render at reduced opacity rather than flashing
+   a skeleton and jumping the layout. */
+.is-refetching {
+  opacity: 0.55;
+  transition: opacity var(--dur) var(--ease);
+  pointer-events: none;
+}
+
+.spin {
+  animation: sim-spin 0.9s linear infinite;
+}
+
+@keyframes sim-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-@media (max-width: 640px) {
+/* ============================================================ responsive */
+
+@media (max-width: 1100px) {
+  .sim-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .sim-wrap {
+    padding: var(--space-6) var(--space-4) var(--space-8);
+  }
+
   .metrics-row {
     grid-template-columns: 1fr;
   }
+
   .sim-controls-bar {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
+
+  /* Segmented controls are inline-flex, so without this they refuse to wrap
+     and push the whole page wider than the viewport. */
+  .pill-group {
+    flex-wrap: wrap;
+  }
+
+  .control-group {
+    width: 100%;
+  }
+
+  .pill-btn,
+  .preset-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* 14 tick labels will not fit on a phone. Show every third and let the
+     readout above the slider carry the exact day. */
+  .timeline-ticks span:not(:first-child):not(:last-child) {
+    display: none;
+  }
+
+  .timeline-ticks span:nth-child(4n + 1) {
+    display: inline;
+  }
+
+  .map-canvas-container {
+    height: 340px;
+    padding: var(--space-2);
+  }
+
+  .legend-bar-wrap {
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .legend-scale {
+    min-width: 100px;
+  }
+
+  .demo-banner code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .lead-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Legend scale with per-bin tick labels, so a reader can name a colour
+   instead of only comparing the two ends of a bar. */
+.legend-scale {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 340px;
+}
+
+.legend-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font: 400 9px/1 var(--font-mono);
+  color: var(--ink-muted);
+}
+
+.legend-ticks-diverging {
+  justify-content: space-between;
+}
+
+.legend-end {
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+/* 2D / 3D switch sits in the map card header next to the extents readout. */
+.map-card-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* The 3D canvas fills the well edge to edge — the padding that frames the
+   flat SVG raster would just crop the scene. */
+.map-canvas-container:has(.terrain3d-wrap) {
+  padding: 0;
 }

@@ -1,0 +1,127 @@
+/* ==========================================================================
+   ForecastTerrain3D
+   ========================================================================== */
+
+.terrain3d-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-sunk);
+  overflow: hidden;
+}
+
+.terrain3d-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.terrain3d-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  /* The orbit control wants the drag; stop the page scrolling under it. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.terrain3d-canvas canvas:active {
+  cursor: grabbing;
+}
+
+/* ------------------------------------------------------------- overlays -- */
+
+.terrain3d-hint,
+.terrain3d-date {
+  position: absolute;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--ink-muted);
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: var(--label-spacing);
+}
+
+.terrain3d-hint {
+  right: var(--space-3);
+  bottom: var(--space-3);
+}
+
+.terrain3d-date {
+  left: var(--space-3);
+  top: var(--space-3);
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  background: rgba(7, 16, 22, 0.72);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 5px var(--space-2);
+}
+
+/* The provenance caption. This sits on the visualisation itself, because the
+   particles read as wind at a glance and they are not wind. */
+.terrain3d-flow-note {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 60%;
+}
+
+.terrain3d-flow-note small {
+  font: 400 10px/1.4 var(--font-sans);
+  color: var(--ink-muted);
+  padding-left: 2px;
+}
+
+
+/* ------------------------------------------------------------- fallback -- */
+
+.terrain3d-fallback {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-6);
+  background: var(--surface-sunk);
+  color: var(--ink-secondary);
+}
+
+.terrain3d-fallback strong {
+  color: var(--ink);
+  font: var(--text-h3);
+}
+
+.terrain3d-fallback span {
+  font-size: 12px;
+  max-width: 36ch;
+  color: var(--ink-muted);
+}
+
+@media (max-width: 760px) {
+  .terrain3d-flow-note {
+    max-width: 78%;
+  }
+
+  .terrain3d-hint {
+    display: none;
+  }
+}
+
+.terrain3d-loading {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunk);
+  color: var(--ink-muted);
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+}

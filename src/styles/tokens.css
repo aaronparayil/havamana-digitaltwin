@@ -1,0 +1,178 @@
+/* ==========================================================================
+   HavaMana — Design Tokens
+   --------------------------------------------------------------------------
+   Single source of truth for colour, type, spacing, radii and motion.
+   Nothing in this codebase should hardcode a hex value: use these roles.
+
+   Theme: "deep space" — near-black ground with a starfield behind glass
+   panels, luminous instrument accents, recessive chrome so the data is the
+   brightest thing on screen.
+
+   The data-visualisation ramps below are NOT chosen by eye. The categorical
+   slots are the validated dark palette, re-verified against this file's
+   --surface-1 (#10161f) with the six computable checks:
+     lightness band · chroma floor · CVD separation · normal-vision floor ·
+     contrast vs surface.  Worst adjacent CVD ΔE 8.4, normal-vision ΔE 19.3,
+     all slots ≥ 3:1 contrast.  Re-run the validator before changing one.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------------------------------------------------------------- surfaces
+     Four planes of depth. Everything sits on --plane; cards on --surface-1;
+     inputs and hovers lift to --surface-2; pressed/active to --surface-3. */
+  --plane:        #05070e;   /* deep space */
+  --surface-1:    #10161f;   /* card / panel / chart surface (validated) */
+  --surface-2:    #18202b;
+  --surface-3:    #222c39;
+  --surface-sunk: #03050a;   /* wells: globe canvas, map canvas, code */
+
+  /* Translucent panel used where the starfield should show through. */
+  --panel-glass:  rgba(16, 22, 31, 0.72);
+  --panel-blur:   blur(14px);
+
+  /* ------------------------------------------------------------------- ink
+     Contrast ratios measured against --surface-1. */
+  --ink:           #e8eef4;  /* primary text        — 15.53:1 */
+  --ink-secondary: #a6b6c4;  /* supporting copy     —  8.74:1 */
+  --ink-muted:     #748796;  /* axis labels, meta   —  4.88:1 */
+  --ink-faint:     #4d5f6e;  /* disabled only       —  2.75:1, never for meaning */
+  --ink-inverse:   #0d161e;  /* text on accent fills */
+
+  /* ----------------------------------------------------------------- lines */
+  --line:        #223140;    /* hairline borders */
+  --line-strong: #2f4353;    /* dividers that need to read */
+  --line-faint:  #1a2733;    /* internal row separators */
+
+  /* ---------------------------------------------------------------- accents
+     Interactive chrome only. These are NOT data colours — a chart series
+     never wears an accent, and an accent never encodes a value. */
+  --accent:          #38bdf8;  /* primary: active nav, focus, links       */
+  --accent-hover:    #7dd3fc;
+  --accent-sunk:     rgba(56, 189, 248, 0.12);
+  --accent-ring:     rgba(56, 189, 248, 0.35);
+  --accent-warm:     #f0b429;  /* secondary: "now" marker, key emphasis   */
+  --accent-warm-sunk: rgba(240, 180, 41, 0.12);
+
+  /* ---------------------------------------------------------------- status
+     Reserved. Only ever means good / warning / serious / critical, and
+     always ships with an icon + label so colour never carries it alone. */
+  --status-good:     #0ca30c;
+  --status-warning:  #fab219;
+  --status-serious:  #ec835a;
+  --status-critical: #d03b3b;
+  --status-good-sunk:     rgba(12, 163, 12, 0.14);
+  --status-warning-sunk:  rgba(250, 178, 25, 0.14);
+  --status-critical-sunk: rgba(208, 59, 59, 0.14);
+
+  /* ======================================================================
+     DATA VISUALISATION
+
+     The categorical slots, the sequential ramps (rainfall / temperature /
+     error) and the diverging anomaly scale live in ONE place:
+
+         src/styles/dataColors.js
+
+     They are not duplicated here. Legend gradients are generated from those
+     same arrays at render time, so the swatch on screen can never drift from
+     the colour the map actually paints. Only chart *chrome* — the recessive
+     stuff that carries no value — is tokenised below.
+     ====================================================================== */
+
+  /* ------------------------------------------------------------ chart chrome
+     Recessive by rule: hairline grid one shade off the surface, solid never
+     dashed, axis quieter than the marks. */
+  --chart-surface:  var(--surface-1);
+  --chart-grid:     #223140;
+  --chart-axis:     #2f4353;
+  --chart-label:    #748796;
+  --chart-tooltip-bg:     #071016;
+  --chart-tooltip-border: #2f4353;
+  /* Cells outside the Karnataka polygon. These are not "a cell with no
+     value" — they are not in the region at all, so they recede fully into
+     the map well and the state boundary does the separating. Relying on
+     fill contrast alone here fails: the darkest ramp step sits only
+     ~1.7:1 off the well, so near-zero rainfall and out-of-state would be
+     indistinguishable without the outline. */
+  --grid-nodata:  var(--surface-sunk);
+  --grid-outline: #3a5163;   /* Karnataka boundary stroke */
+
+  /* ======================================================================
+     TYPOGRAPHY
+     Inter for everything including hero figures (a display/serif face on a
+     stat value reads as decoration). Mono is reserved for labels, axis
+     ticks and any column of numbers that must align vertically.
+     ====================================================================== */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'DM Mono', 'SF Mono', monospace;
+
+  --text-display: 600 clamp(28px, 3vw, 40px)/1.08 var(--font-sans);
+  --text-h1:      600 clamp(24px, 2.4vw, 32px)/1.15 var(--font-sans);
+  --text-h2:      600 19px/1.25 var(--font-sans);
+  --text-h3:      600 15px/1.3  var(--font-sans);
+  --text-body:    400 14px/1.6  var(--font-sans);
+  --text-small:   400 13px/1.5  var(--font-sans);
+  --text-meta:    400 12px/1.4  var(--font-sans);
+
+  /* Uppercase mono micro-labels — the "instrument panel" voice. */
+  --text-label:   500 10px/1 var(--font-mono);
+  --label-spacing: 0.08em;
+
+  /* Stat values: proportional figures. tabular-nums ONLY in table columns
+     and axis ticks, never on a large standalone number. */
+  --text-stat:    600 clamp(24px, 2vw, 30px)/1 var(--font-sans);
+
+  /* ============================================================== spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* =============================================================== radii */
+  --radius-sm:   4px;
+  --radius:      8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-full: 999px;
+
+  /* ========================================================= elevation
+     On a dark ground a drop shadow does little; depth comes from a
+     lighter surface plus a hairline ring. Glows are reserved for
+     genuinely live/active elements. */
+  --ring:       inset 0 0 0 1px var(--line);
+  --ring-hover: inset 0 0 0 1px var(--line-strong);
+  --shadow:     0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-lg:  0 2px 4px rgba(0, 0, 0, 0.45), 0 18px 48px rgba(0, 0, 0, 0.42);
+  --glow-accent: 0 0 0 3px var(--accent-ring);
+  --glow-live:   0 0 12px rgba(12, 163, 12, 0.5);
+
+  /* ============================================================== motion */
+  --ease:      cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast:  120ms;
+  --dur:       200ms;
+  --dur-slow:  320ms;
+
+  /* ============================================================== layout */
+  --topbar-h:    60px;
+  --content-max: 1440px;
+}
+
+/* Respect the OS reduced-motion setting everywhere, once. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

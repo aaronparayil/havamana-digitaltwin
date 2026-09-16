@@ -1,0 +1,234 @@
+/* ==========================================================================
+   Globe3D
+   ========================================================================== */
+
+.globe-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-sunk);
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.globe-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.globe-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+  cursor: grab;
+}
+
+.globe-canvas canvas:active {
+  cursor: grabbing;
+}
+
+.globe-controls {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Provenance block. Deliberately on the visualisation, not in a tooltip:
+   a live globe beside a forecasting model invites exactly the wrong
+   assumption about where the numbers came from. */
+.globe-source {
+  position: absolute;
+  left: var(--space-4);
+  top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(7, 16, 22, 0.74);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  pointer-events: none;
+}
+
+.globe-source > span:first-child {
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--status-good);
+}
+
+.globe-time {
+  font: 400 11px/1.3 var(--font-mono);
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.globe-source small {
+  font: 400 10px/1.3 var(--font-sans);
+  color: var(--ink-muted);
+}
+
+.globe-hint {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: var(--label-spacing);
+  pointer-events: none;
+}
+
+.globe-fallback {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-6);
+  background: var(--surface-sunk);
+  border-radius: var(--radius);
+  color: var(--ink-secondary);
+}
+
+.globe-fallback strong {
+  color: var(--ink);
+  font: var(--text-h3);
+}
+
+.globe-fallback span {
+  font-size: 12px;
+  max-width: 36ch;
+  color: var(--ink-muted);
+}
+
+.globe-loading {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunk);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .globe-hint {
+    display: none;
+  }
+
+  .globe-source {
+    left: var(--space-3);
+    top: var(--space-3);
+    max-width: 62%;
+  }
+
+  .globe-controls {
+    top: var(--space-3);
+    right: var(--space-3);
+  }
+}
+
+/* ------------------------------------------------------- view navigation --
+   World -> India -> Karnataka. The last step is a drill-down: once you're
+   there, the same button hands off to the forecast model whose domain that is. */
+.globe-nav {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-5);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  background: rgba(7, 16, 22, 0.82);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow);
+}
+
+.globe-nav-btn {
+  border: 0;
+  background: transparent;
+  color: var(--ink-secondary);
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  padding: 8px var(--space-4);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+.globe-nav-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.globe-nav-btn.active {
+  background: var(--accent);
+  color: var(--ink-inverse);
+  font-weight: 600;
+}
+
+.globe-nav-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Once focused on Karnataka the button advertises its second action, so the
+   hand-off to the model page is discoverable rather than a hidden double-click. */
+.globe-nav-btn.is-drill.active {
+  background: var(--accent-warm);
+  color: var(--ink-inverse);
+}
+
+.drill-arrow {
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  padding-left: 7px;
+  border-left: 1px solid rgba(13, 22, 30, 0.35);
+}
+
+@media (max-width: 760px) {
+  .globe-nav {
+    bottom: var(--space-3);
+  }
+
+  .globe-nav-btn {
+    padding: 7px var(--space-3);
+  }
+
+  .drill-arrow {
+    display: none;
+  }
+}
+
+.globe-fallback-hint {
+  font-size: 11px;
+  color: var(--ink-faint);
+  max-width: 44ch;
+}
+
+.globe-fallback code {
+  font: 400 11px/1 var(--font-mono);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 5px;
+  color: var(--ink-secondary);
+}
