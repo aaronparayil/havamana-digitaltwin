@@ -5,6 +5,9 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, BarElement, Title, Tooltip as ChartTooltip, Legend, Filler
 } from 'chart.js'
+import { chartOptions as sharedChartOptions, lineSeries, barSeries } from '../styles/chartTheme'
+import { seriesFor } from '../styles/dataColors'
+import { API_BASE } from '../hooks/useApiHealth'
 import '../pages/ModelSimulation.css'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, ChartTooltip, Legend, Filler)
@@ -50,8 +53,8 @@ export function Comparisons() {
       setError(null)
       try {
         const [metricsRes, cityRes] = await Promise.all([
-          fetch('http://localhost:5005/api/metrics'),
-          fetch('http://localhost:5005/api/forecast/date')
+          fetch(`${API_BASE}/api/metrics`),
+          fetch(`${API_BASE}/api/forecast/date`)
         ])
         if (!metricsRes.ok || !cityRes.ok) throw new Error('Request failed')
         const metrics = await metricsRes.json()
@@ -87,16 +90,14 @@ export function Comparisons() {
     const maeByDay = days.map((d) => metrics.models.ConvLSTM2D.lead_time_metrics[d][activeVariable]?.MAE)
     return {
       labels,
-      datasets: [{
-        label: `ConvLSTM2D ${VARIABLE_LABELS[activeVariable]} MAE by Lead Day`,
-        data: maeByDay,
-        borderColor: '#2563eb',
-        backgroundColor: 'rgba(37, 99, 235, 0.12)',
-        fill: true,
-        tension: 0.3,
-        borderWidth: 3,
-        pointRadius: 3,
-      }]
+      datasets: [
+        lineSeries(
+          `ConvLSTM2D ${VARIABLE_LABELS[activeVariable]} MAE`,
+          maeByDay,
+          seriesFor('ConvLSTM2D'),
+          { fill: true }
+        ),
+      ]
     }
   }, [metrics, activeVariable])
 
@@ -105,27 +106,20 @@ export function Comparisons() {
     const cities = Object.keys(cityForecast.city_timeseries)
     return {
       labels: cities,
-      datasets: [{
-        label: `Day +1 Forecast — ${VARIABLE_LABELS[activeVariable]}`,
-        data: cities.map((c) => cityForecast.city_timeseries[c][`pred_${activeVariable}`]?.[0]),
-        backgroundColor: '#2b8a72',
-        borderRadius: 4,
-      }]
+      datasets: [
+        barSeries(
+          `Day +1 forecast — ${VARIABLE_LABELS[activeVariable]}`,
+          cities.map((c) => cityForecast.city_timeseries[c][`pred_${activeVariable}`]?.[0]),
+          seriesFor('ConvLSTM2D')
+        ),
+      ]
     }
   }, [cityForecast, activeVariable])
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 } } },
-      tooltip: { backgroundColor: '#173c3a', padding: 10 }
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: '#84908b', font: { family: 'DM Mono', size: 10 } } },
-      y: { grid: { color: '#e8e5dc' }, ticks: { color: '#84908b', font: { family: 'DM Mono', size: 10 } } }
-    }
-  }
+  // Single series on both charts here, so the legend box is off — each
+  // panel title already names what is plotted.
+  const lineOpts = sharedChartOptions({ yTitle: `MAE (${activeVariable === 'rainfall' ? 'mm/day' : '°C'})`, showLegend: false })
+  const barOpts = sharedChartOptions({ yTitle: VARIABLE_LABELS[activeVariable], showLegend: false, beginAtZero: true, crosshair: false })
 
   return (
     <div className="sim-wrap">
@@ -134,7 +128,7 @@ export function Comparisons() {
           <div className="sim-badge-row">
             <span className="sim-badge active"><i /> Karnataka High-Resolution Pilot</span>
             {!loading && !error && (
-              <span className="sim-badge" style={{ background: '#deeee1', color: '#2b8a72' }}>
+              <span className="sim-badge is-live">
                 <CheckCircle2 size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
                 Live Neural API
               </span>
@@ -161,12 +155,12 @@ export function Comparisons() {
       </section>
 
       {error && (
-        <section className="timeline-card" style={{ color: '#a15c2e', font: '13px "DM Sans", sans-serif' }}>
+        <section className="sim-state-card is-error">
           ⚠️ {error}
         </section>
       )}
       {loading && !error && (
-        <section className="timeline-card" style={{ font: '13px "DM Sans", sans-serif', color: '#6a7972', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <section className="sim-state-card">
           <RefreshCw size={14} className="spin" /> Loading comparison data...
         </section>
       )}
@@ -175,11 +169,11 @@ export function Comparisons() {
         <>
           {/* Benchmark Table */}
           <section className="benchmark-table-card">
-            <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)' }}>
+            <div className="map-card-header">
               <span className="section-kicker">Empirical Verification (2023–2025 Test Split)</span>
-              <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Forecasting Model Benchmark</h2>
+              <h2 className="card-title">Forecasting Model Benchmark</h2>
             </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="benchmark-table-wrap">
               <table className="benchmark-table">
                 <thead>
                   <tr>
@@ -220,12 +214,12 @@ export function Comparisons() {
             {/* Lead-time degradation */}
             <div className="chart-card">
               <span className="section-kicker">Forecast Horizon Degradation</span>
-              <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Accuracy vs. Lead Day</h2>
+              <h2 className="card-title">Accuracy vs. Lead Day</h2>
               <div className="chart-area">
                 {leadTimeChartData ? (
-                  <Line data={leadTimeChartData} options={chartOptions} />
+                  <Line data={leadTimeChartData} options={lineOpts} />
                 ) : (
-                  <p style={{ color: '#6a7972', fontSize: 13, marginTop: 40 }}>
+                  <p className="sim-state-card">
                     Run <code>python evaluate.py</code> on the backend to generate lead-time degradation data.
                   </p>
                 )}
@@ -235,9 +229,9 @@ export function Comparisons() {
             {/* City comparison */}
             <div className="chart-card">
               <span className="section-kicker">Regional Snapshot</span>
-              <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Karnataka Cities — Day +1 Forecast</h2>
+              <h2 className="card-title">Karnataka Cities — Day +1 Forecast</h2>
               <div className="chart-area">
-                {cityBarData ? <Bar data={cityBarData} options={chartOptions} /> : null}
+                {cityBarData ? <Bar data={cityBarData} options={barOpts} /> : null}
               </div>
             </div>
           </section>

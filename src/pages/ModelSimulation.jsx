@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import {
   Play, Pause, RotateCcw, CloudRain, Thermometer,
-  CheckCircle2, AlertCircle, RefreshCw, Sparkles, TrendingUp, MapPin
+  CheckCircle2, AlertCircle, RefreshCw, Sparkles, TrendingUp, MapPin,
+  Grid2x2, Box
 } from 'lucide-react'
 import { Line } from 'react-chartjs-2'
 import {
@@ -9,6 +10,14 @@ import {
   LineElement, Title, Tooltip as ChartTooltip, Legend, Filler
 } from 'chart.js'
 import { DatePicker } from '../components/DatePicker'
+import { cellColor, legendGradient, legendBounds, legendTicks, seriesFor } from '../styles/dataColors'
+import { chartOptions, lineSeries } from '../styles/chartTheme'
+import { API_BASE } from '../hooks/useApiHealth'
+
+// Loaded only when the 3D tab is opened — keeps three.js out of the main bundle.
+const ForecastTerrain3D = lazy(() =>
+  import('../components/ForecastTerrain3D').then((m) => ({ default: m.ForecastTerrain3D }))
+)
 import './ModelSimulation.css'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
@@ -69,6 +78,60 @@ const CITIES = [
   { name: 'Kalaburagi', y: 26, x: 19, region: 'North Interior Semi-Arid' }
 ]
 
+/* ---------------------------------------------------------------- benchmark
+   The benchmark table used to hardcode four rows and stamp "Neural Best" on
+   ConvLSTM unconditionally — while the numbers beside it showed climatology
+   winning every column. The winner is now computed per column from whatever
+   data is actually loaded, so the tag can never contradict the table. */
+const LEAD_DAYS = [
+  { day: 1, label: '24h lead' },
+  { day: 3, label: '72h lead' },
+  { day: 7, label: '1-week lead' },
+  { day: 14, label: '2-week horizon' },
+]
+
+const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : '—')
+
+const BENCH_ROWS = [
+  { key: 'ConvLSTM2D', label: 'ConvLSTM2D (state model)' },
+  { key: 'Climatology', label: 'Climatology baseline (15-yr mean)' },
+  { key: 'Persistence', label: 'Persistence baseline (repeat day 0)' },
+  { key: 'LinearTrend', label: 'Linear trend extrapolation' },
+]
+
+// `lowerIsBetter` is what makes the winner calculation correct for both error
+// metrics and R², rather than assuming one direction.
+const BENCH_COLUMNS = [
+  { key: 'rainfall.MAE',  label: 'Rainfall MAE',  unit: ' mm', lowerIsBetter: true },
+  { key: 'rainfall.RMSE', label: 'Rainfall RMSE', unit: ' mm', lowerIsBetter: true },
+  { key: 'rainfall.R2',   label: 'Rainfall R²', unit: '',  lowerIsBetter: false },
+  { key: 'tmax.MAE',      label: 'Tmax MAE',      unit: ' °C', lowerIsBetter: true },
+  { key: 'tmax.RMSE',     label: 'Tmax RMSE',     unit: ' °C', lowerIsBetter: true },
+  { key: 'tmax.R2',       label: 'Tmax R²',     unit: '',  lowerIsBetter: false },
+  { key: 'tmin.MAE',      label: 'Tmin MAE',      unit: ' °C', lowerIsBetter: true },
+  { key: 'tmin.R2',       label: 'Tmin R²',     unit: '',  lowerIsBetter: false },
+]
+
+function benchValue(metrics, modelKey, column) {
+  const [variable, stat] = column.key.split('.')
+  const v = metrics?.[modelKey]?.variables?.[variable]?.[stat]
+  return typeof v === 'number' ? v : null
+}
+
+function bestModelFor(metrics, column) {
+  let winner = null
+  let bestVal = null
+  for (const row of BENCH_ROWS) {
+    const v = benchValue(metrics, row.key, column)
+    if (v === null) continue
+    if (bestVal === null || (column.lowerIsBetter ? v < bestVal : v > bestVal)) {
+      bestVal = v
+      winner = row.key
+    }
+  }
+  return winner
+}
+
 // Local-timezone "today" as YYYY-MM-DD, used to default the date picker to a live current date
 function getTodayISO() {
   const d = new Date()
@@ -86,6 +149,8 @@ export function ModelSimulation() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [selectedCity, setSelectedCity] = useState('Bengaluru (Pilot)')
   const [hoveredPixel, setHoveredPixel] = useState(null)
+  // 2D stays the precise reading surface; 3D is the showpiece. Neither replaces the other.
+  const [renderMode, setRenderMode] = useState('2d') // '2d' | '3d'
 
   // Explorer mode: forward-looking scenarios vs. a specific calendar date lookup
   const [explorerMode, setExplorerMode] = useState('future') // 'future' | 'date'
@@ -109,7 +174,7 @@ export function ModelSimulation() {
     setDateLoading(true)
     setDateError(null)
     try {
-      const res = await fetch(`http://localhost:5005/api/forecast/date?date=${dateStr}`)
+      const res = await fetch(`${API_BASE}/api/forecast/date?date=${dateStr}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Request failed')
       setDateForecast(data)
@@ -131,7 +196,7 @@ export function ModelSimulation() {
   const fetchFutureForecast = async (scenario) => {
     setLoading(true)
     try {
-      const res = await fetch(`http://localhost:5005/api/forecast/future?scenario=${scenario}`)
+      const res = await fetch(`${API_BASE}/api/forecast/future?scenario=${scenario}`)
       if (res.ok) {
         const data = await res.json()
         setForecastData(data)
@@ -150,42 +215,51 @@ export function ModelSimulation() {
 
   const fetchMetrics = async () => {
     try {
-      const res = await fetch('http://localhost:5005/api/metrics')
+      const res = await fetch(`${API_BASE}/api/metrics`)
       if (res.ok) {
         const data = await res.json()
         setBenchmarkMetrics(data)
       }
     } catch (e) {
-      // Exact empirical Karnataka test metrics (2023-2025 test set)
+      // Real numbers from backend/outputs/metrics/evaluation_metrics_karnataka.json
+      // (2023-2025 test split, 1,083 sequences). Kept in sync with that file —
+      // the previous constants here were labelled "exact empirical" but did not
+      // match any evaluation run.
       setBenchmarkMetrics({
         ConvLSTM2D: {
           variables: {
-            rainfall: { MAE: 4.96, RMSE: 8.04, R2: 0.19 },
-            tmax: { MAE: 1.93, RMSE: 2.42, R2: 0.47 },
-            tmin: { MAE: 1.80, RMSE: 2.14, R2: 0.33 }
-          }
+            rainfall: { MAE: 4.387, RMSE: 7.974, R2: 0.207 },
+            tmax: { MAE: 1.255, RMSE: 1.697, R2: 0.739 },
+            tmin: { MAE: 0.925, RMSE: 1.287, R2: 0.757 },
+          },
+          lead_time_metrics: {
+            day_1: { rainfall: { MAE: 3.993 }, tmax: { MAE: 0.655, R2: 0.927 }, tmin: { MAE: 0.54, R2: 0.92 } },
+            day_3: { rainfall: { MAE: 4.421 }, tmax: { MAE: 1.054, R2: 0.821 }, tmin: { MAE: 0.81, R2: 0.815 } },
+            day_7: { rainfall: { MAE: 4.434 }, tmax: { MAE: 1.319, R2: 0.727 }, tmin: { MAE: 0.974, R2: 0.734 } },
+            day_14: { rainfall: { MAE: 4.422 }, tmax: { MAE: 1.494, R2: 0.641 }, tmin: { MAE: 1.041, R2: 0.707 } },
+          },
         },
         Climatology: {
           variables: {
-            rainfall: { MAE: 3.51, RMSE: 7.89, R2: 0.22 },
-            tmax: { MAE: 1.24, RMSE: 1.70, R2: 0.74 },
-            tmin: { MAE: 1.00, RMSE: 1.36, R2: 0.73 }
+            rainfall: { MAE: 3.51, RMSE: 7.888, R2: 0.224 },
+            tmax: { MAE: 1.238, RMSE: 1.698, R2: 0.739 },
+            tmin: { MAE: 1.002, RMSE: 1.359, R2: 0.729 },
           }
         },
         Persistence: {
           variables: {
-            rainfall: { MAE: 3.99, RMSE: 10.09, R2: -0.27 },
-            tmax: { MAE: 1.33, RMSE: 1.80, R2: 0.70 },
-            tmin: { MAE: 1.03, RMSE: 1.48, R2: 0.68 }
+            rainfall: { MAE: 3.989, RMSE: 10.093, R2: -0.271 },
+            tmax: { MAE: 1.331, RMSE: 1.805, R2: 0.705 },
+            tmin: { MAE: 1.032, RMSE: 1.477, R2: 0.68 },
           }
         },
         LinearTrend: {
           variables: {
-            rainfall: { MAE: 4.12, RMSE: 9.15, R2: -0.04 },
-            tmax: { MAE: 1.62, RMSE: 2.14, R2: 0.58 },
-            tmin: { MAE: 1.11, RMSE: 1.56, R2: 0.65 }
+            rainfall: { MAE: 4.123, RMSE: 9.146, R2: -0.044 },
+            tmax: { MAE: 1.619, RMSE: 2.143, R2: 0.584 },
+            tmin: { MAE: 1.106, RMSE: 1.557, R2: 0.645 },
           }
-        }
+        },
       })
     }
   }
@@ -382,87 +456,11 @@ export function ModelSimulation() {
     return currentDateDay.forecast_grid?.[activeVariable]
   }, [currentDateDay, dateViewMode, activeVariable])
 
-  // Sequential magnitude scale for absolute forecast error (date-explorer "error" layer)
-  const getErrorColor = (val, isLand = true) => {
-    if (!isLand) return 'rgba(23, 60, 58, 0.15)'
-    const v = Math.abs(val || 0)
-    const maxErr = activeVariable === 'rainfall' ? 20 : 5
-    const norm = Math.min(1, v / maxErr)
-    const r = Math.round(255 - norm * 30)
-    const g = Math.round(240 - norm * 200)
-    const b = Math.round(200 - norm * 190)
-    return `rgb(${r}, ${g}, ${b})`
-  }
+  // Colour scales come from styles/dataColors.js — a single validated source
+  // shared with the legend, so a swatch can never disagree with the map.
+  const getErrorColor = (val, isLand = true) => cellColor(val, activeVariable, 'error', isLand)
 
-  // Color scaling helper
-  const getColor = (val, variable, mode, isLand = true) => {
-    // Ocean / outside Karnataka
-    if (!isLand) {
-      return 'rgba(23, 60, 58, 0.15)'
-    }
-
-    if (mode === 'anomaly') {
-      // Divergent anomaly scale
-      if (variable === 'rainfall') {
-        const v = val || 0
-        if (v < -2) {
-          const norm = Math.min(1, Math.abs(v) / 25)
-          const r = Math.round(217 + norm * 35)
-          const g = Math.round(119 * (1 - norm * 0.4))
-          const b = Math.round(6 * (1 - norm * 0.4))
-          return `rgb(${r}, ${g}, ${b})`
-        } else if (v > 2) {
-          const norm = Math.min(1, v / 30)
-          const r = Math.round(49 * (1 - norm * 0.7))
-          const g = Math.round(130 + norm * 40)
-          const b = Math.round(210 + norm * 40)
-          return `rgb(${r}, ${g}, ${b})`
-        }
-        return 'rgba(240, 244, 248, 0.9)'
-      } else {
-        const v = val || 0
-        if (v < -0.3) {
-          const norm = Math.min(1, Math.abs(v) / 4)
-          const r = Math.round(37 + (1 - norm) * 100)
-          const g = Math.round(99 + (1 - norm) * 80)
-          const b = Math.round(235)
-          return `rgb(${r}, ${g}, ${b})`
-        } else if (v > 0.3) {
-          const norm = Math.min(1, v / 4)
-          const r = Math.round(225 + norm * 25)
-          const g = Math.round(60 * (1 - norm * 0.7))
-          const b = Math.round(40 * (1 - norm * 0.7))
-          return `rgb(${r}, ${g}, ${b})`
-        }
-        return 'rgba(245, 245, 235, 0.92)'
-      }
-    }
-
-    if (variable === 'rainfall') {
-      if (val === null || val === undefined || isNaN(val) || val <= 0.05) {
-        return 'rgba(224, 235, 245, 0.85)' // Clean dry land
-      }
-      const norm = Math.min(1, val / 60)
-      if (norm < 0.1) return 'rgba(186, 214, 235, 0.92)'
-      if (norm < 0.3) return 'rgba(107, 174, 214, 0.95)'
-      if (norm < 0.6) return 'rgba(49, 130, 189, 1)'
-      return 'rgba(8, 69, 148, 1)'
-    } else if (variable === 'tmax') {
-      const v = (val === null || val === undefined || isNaN(val)) ? 28 : val
-      const norm = Math.max(0, Math.min(1, (v - 20) / 24))
-      const r = Math.round(240 + norm * 15)
-      const g = Math.round(210 * (1 - norm * 0.8))
-      const b = Math.round(100 * (1 - norm * 0.8))
-      return `rgb(${r}, ${g}, ${b})`
-    } else {
-      const v = (val === null || val === undefined || isNaN(val)) ? 18 : val
-      const norm = Math.max(0, Math.min(1, (v - 10) / 20))
-      const r = Math.round(49 + norm * 180)
-      const g = Math.round(130 + norm * 50)
-      const b = Math.round(189 * (1 - norm * 0.6))
-      return `rgb(${r}, ${g}, ${b})`
-    }
-  }
+  const getColor = (val, variable, mode, isLand = true) => cellColor(val, variable, mode, isLand)
 
   // Formats an ISO date string (YYYY-MM-DD) as "Sep 14, 2026"
   const formatPrettyDate = (isoStr) => {
@@ -479,59 +477,33 @@ export function ModelSimulation() {
     return `${parts[1]}/${parts[2]}`
   })
 
+  const yTitle = activeVariable === 'rainfall' ? 'Rainfall (mm/day)' : 'Temperature (°C)'
+
+  // The model is ALWAYS series 1 and the reference baseline ALWAYS series 2,
+  // whichever variable is selected. Repainting a line when the user switches
+  // variable would teach them a colour that then lies.
   const lineChartData = {
     labels: chartLabels,
     datasets: [
-      {
-        label: `ConvLSTM2D Future Forecast (${activeVariable.toUpperCase()})`,
-        data: cityData ? cityData[`pred_${activeVariable}`] : [],
-        borderColor: activeVariable === 'rainfall' ? '#2563eb' : '#e11d48',
-        backgroundColor: activeVariable === 'rainfall' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(225, 29, 72, 0.12)',
-        fill: true,
-        tension: 0.35,
-        borderWidth: 3,
-        pointRadius: 4,
-        pointBackgroundColor: '#ffffff',
-        pointBorderWidth: 2,
-      },
-      {
-        label: `15-Yr Historical Normal Baseline`,
-        data: cityData && cityData[`climatology_${activeVariable}`] ? cityData[`climatology_${activeVariable}`] : [],
-        borderColor: '#059669',
-        backgroundColor: 'transparent',
-        borderDash: [5, 4],
-        borderWidth: 2,
-        pointRadius: 3,
-      }
-    ]
+      lineSeries(
+        `ConvLSTM2D forecast`,
+        cityData ? cityData[`pred_${activeVariable}`] : [],
+        seriesFor('ConvLSTM2D'),
+        { fill: true }
+      ),
+      lineSeries(
+        '15-yr historical normal',
+        cityData?.[`climatology_${activeVariable}`] ?? [],
+        seriesFor('Climatology'),
+        { dashed: true }
+      ),
+    ],
   }
 
-  const lineChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 } } },
-      tooltip: {
-        backgroundColor: '#173c3a',
-        padding: 10,
-        titleFont: { family: 'DM Mono', size: 12 },
-        bodyFont: { family: 'DM Sans', size: 12 }
-      }
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: '#84908b', font: { family: 'DM Mono', size: 10 } } },
-      y: {
-        min: activeVariable === 'rainfall' ? 0 : undefined,
-        grid: { color: '#e8e5dc' },
-        ticks: { color: '#84908b', font: { family: 'DM Mono', size: 10 } },
-        title: {
-          display: true,
-          text: activeVariable === 'rainfall' ? 'Rainfall (mm/day)' : 'Temperature (°C)',
-          font: { family: 'DM Sans', size: 11, weight: 'bold' }
-        }
-      }
-    }
-  }
+  const lineChartOptions = chartOptions({
+    yTitle,
+    beginAtZero: activeVariable === 'rainfall',
+  })
 
   // Chart Data for the date-explorer City Time Series: predicted vs. actual recorded when
   // ground truth exists (historical dates), or vs. the 15-Yr historical normal as the most
@@ -550,37 +522,34 @@ export function ModelSimulation() {
   const dateLineChartData = {
     labels: dateChartLabels,
     datasets: [
-      {
-        label: `ConvLSTM2D Forecast (${activeVariable.toUpperCase()})`,
-        data: dateCityData ? dateCityData[`pred_${activeVariable}`] : [],
-        borderColor: activeVariable === 'rainfall' ? '#2563eb' : '#e11d48',
-        backgroundColor: activeVariable === 'rainfall' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(225, 29, 72, 0.12)',
-        fill: true,
-        tension: 0.35,
-        borderWidth: 3,
-        pointRadius: 4,
-        pointBackgroundColor: '#ffffff',
-        pointBorderWidth: 2,
-      },
-      ...(hasActualComparison ? [{
-        label: `Actual Recorded (${activeVariable.toUpperCase()})`,
-        data: dateCityData[`actual_${activeVariable}`],
-        borderColor: '#173c3a',
-        backgroundColor: 'transparent',
-        borderDash: [5, 4],
-        borderWidth: 2,
-        pointRadius: 3,
-      }] : (dateCityData?.[`climatology_${activeVariable}`] ? [{
-        label: `15-Yr Historical Normal (${activeVariable.toUpperCase()})`,
-        data: dateCityData[`climatology_${activeVariable}`],
-        borderColor: '#059669',
-        backgroundColor: 'transparent',
-        borderDash: [5, 4],
-        borderWidth: 2,
-        pointRadius: 3,
-      }] : []))
-    ]
+      lineSeries(
+        'ConvLSTM2D forecast',
+        dateCityData ? dateCityData[`pred_${activeVariable}`] : [],
+        seriesFor('ConvLSTM2D'),
+        { fill: true }
+      ),
+      ...(hasActualComparison
+        ? [lineSeries(
+            'Actual recorded',
+            dateCityData[`actual_${activeVariable}`],
+            seriesFor('Persistence'),
+            { dashed: true }
+          )]
+        : (dateCityData?.[`climatology_${activeVariable}`]
+            ? [lineSeries(
+                '15-yr historical normal',
+                dateCityData[`climatology_${activeVariable}`],
+                seriesFor('Climatology'),
+                { dashed: true }
+              )]
+            : [])),
+    ],
   }
+
+  const dateLineChartOptions = chartOptions({
+    yTitle,
+    beginAtZero: activeVariable === 'rainfall',
+  })
 
   return (
     <div className="sim-wrap">
@@ -590,18 +559,18 @@ export function ModelSimulation() {
           <div className="sim-badge-row">
             <span className="sim-badge active"><i /> Karnataka High-Resolution Pilot</span>
             <span className="sim-badge">15-Year IMD Foundation (2010–2025)</span>
-            <span className="sim-badge" style={{ background: '#e0e7ff', color: '#3730a3' }}>
+            <span className="sim-badge">
               Resolution: ~22 km Grid
             </span>
             {apiConnected ? (
-              <span className="sim-badge" style={{ background: '#deeee1', color: '#2b8a72' }}>
+              <span className="sim-badge is-live">
                 <CheckCircle2 size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
                 Neural API Live
               </span>
             ) : (
-              <span className="sim-badge" style={{ background: '#fef3e2', color: '#a67b2e' }}>
+              <span className="sim-badge is-demo">
                 <AlertCircle size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
-                Local State Engine
+                Demo data — API offline
               </span>
             )}
           </div>
@@ -612,12 +581,27 @@ export function ModelSimulation() {
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div className="sim-actions">
           <button className="preset-btn" onClick={() => fetchFutureForecast(selectedScenario)}>
             <RefreshCw size={14} className={loading ? 'spin' : ''} /> {loading ? 'Forecasting...' : 'Re-compute Forecast'}
           </button>
         </div>
       </section>
+
+      {/* When the API is unreachable the page falls back to a synthetic
+          generator. Saying so plainly is the point: the charts below are
+          indistinguishable from real model output at a glance. */}
+      {!apiConnected && (
+        <div className="demo-banner">
+          <AlertCircle size={16} />
+          <div>
+            <strong>Showing demo data, not model output.</strong>{' '}
+            The forecasting API at <code>{API_BASE}</code> is unreachable, so every
+            value on this page is generated locally for layout purposes. Start the backend
+            to see real ConvLSTM2D forecasts.
+          </div>
+        </div>
+      )}
 
       {/* Explorer Mode Tabs: Forward Scenarios vs. a Specific Calendar Date */}
       <section className="sim-controls-bar" style={{ marginBottom: 4 }}>
@@ -695,7 +679,7 @@ export function ModelSimulation() {
       </section>
 
       {dateError && (
-        <section className="timeline-card" style={{ color: '#a15c2e', font: '13px "DM Sans", sans-serif' }}>
+        <section className="sim-state-card is-error">
           ⚠️ {dateError}
         </section>
       )}
@@ -706,15 +690,15 @@ export function ModelSimulation() {
             <div className="timeline-top">
               <div className="timeline-playback">
                 <div>
-                  <strong style={{ font: '600 16px Fraunces, serif', color: '#173c3a' }}>
+                  <strong className="scrub-readout">
                     Forecast Horizon: Day +{dateLeadDay} of 14
                   </strong>
-                  <span style={{ marginLeft: 8, font: '11px "DM Mono", monospace', color: '#78847e' }}>
+                  <span className="scrub-date">
                     ({currentDateDay?.date})
                   </span>
                 </div>
               </div>
-              <div style={{ font: '11px "DM Mono", monospace', color: dateForecast.has_ground_truth ? '#2b8a72' : '#a67b2e' }}>
+              <div className={`card-meta ${dateForecast.has_ground_truth ? 'is-good' : 'is-warning'}`}>
                 {dateForecast.has_ground_truth ? '● Ground truth available for this window' : '● Beyond recorded data — model forecast only'}
               </div>
             </div>
@@ -742,11 +726,11 @@ export function ModelSimulation() {
               <div className="map-card-header">
                 <div>
                   <span className="section-kicker">Karnataka Spatial Grid (32×32 High-Res)</span>
-                  <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>
+                  <h2 className="card-title">
                     {dateViewMode === 'forecast' ? 'ConvLSTM2D Forecast' : dateViewMode === 'actual' ? 'Actual Recorded Climate' : 'Absolute Forecast Error'} — {activeVariable.toUpperCase()}
                   </h2>
                 </div>
-                <span style={{ font: '11px "DM Mono", monospace', color: '#8c9790' }}>
+                <span className="card-meta">
                   Extents: 11.5°N–18.5°N, 74.0°E–78.6°E (~22 km/cell)
                 </span>
               </div>
@@ -778,8 +762,8 @@ export function ModelSimulation() {
                       const svgY = 31 - city.y
                       return (
                         <g key={idx} transform={`translate(${city.x + 0.5}, ${svgY + 0.5})`}>
-                          <circle r="0.9" fill="#173c3a" stroke="#fff" strokeWidth="0.3" />
-                          <circle r="0.4" fill="#d16f43" />
+                          <circle r="0.85" className="city-pin" />
+                          <circle r="0.3" fill="var(--accent-warm)" />
                         </g>
                       )
                     })}
@@ -789,10 +773,10 @@ export function ModelSimulation() {
             </div>
 
             <div className="chart-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div className="card-row">
                 <div>
                   <span className="section-kicker">Regional Point Trajectory</span>
-                  <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Forecast vs. {comparisonLabel}</h2>
+                  <h2 className="card-title">Forecast vs. {comparisonLabel}</h2>
                 </div>
                 <select className="city-select" value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>
                   {CITIES.map((c, i) => (
@@ -801,9 +785,9 @@ export function ModelSimulation() {
                 </select>
               </div>
               <div className="chart-area">
-                <Line data={dateLineChartData} options={lineChartOptions} />
+                <Line data={dateLineChartData} options={dateLineChartOptions} />
               </div>
-              <div style={{ marginTop: 14, padding: '12px 14px', background: '#f5efe4', borderRadius: 4, font: '11px "DM Sans", sans-serif', color: '#5f7069' }}>
+              <div className="context-note">
                 💡 <strong>Date Explorer:</strong> Pick any date from 2010 onward — past or future. Historical dates show the model's forecast alongside what actually happened; dates beyond the recorded dataset show a forecast grounded in the most recent observations from that same time of year.
               </div>
             </div>
@@ -831,7 +815,6 @@ export function ModelSimulation() {
           {forecastData?.forecast_start_date && forecastData?.forecast_end_date && (
             <span
               className="sim-badge"
-              style={{ background: '#e0e7ff', color: '#3730a3' }}
               title="Actual calendar dates this scenario forecasts, resolved relative to today"
             >
               📅 {formatPrettyDate(forecastData.forecast_start_date)} → {formatPrettyDate(forecastData.forecast_end_date)}
@@ -909,15 +892,15 @@ export function ModelSimulation() {
               <RotateCcw size={13} /> Reset
             </button>
             <div style={{ marginLeft: 8 }}>
-              <strong style={{ font: '600 16px Fraunces, serif', color: '#173c3a' }}>
+              <strong className="scrub-readout">
                 Forecast Horizon: Day +{leadDay} of 14
               </strong>
-              <span style={{ marginLeft: 8, font: '11px "DM Mono", monospace', color: '#78847e' }}>
+              <span className="scrub-date">
                 ({currentDayData?.date})
               </span>
             </div>
           </div>
-          <div style={{ font: '11px "DM Mono", monospace', color: '#2b8a72' }}>
+          <div className="card-meta is-good">
             ● Karnataka Forward Projection: +{leadDay * 24}h Lookahead
           </div>
         </div>
@@ -953,16 +936,44 @@ export function ModelSimulation() {
           <div className="map-card-header">
             <div>
               <span className="section-kicker">Karnataka Spatial Grid (32×32 High-Res)</span>
-              <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>
+              <h2 className="card-title">
                 {viewMode === 'forecast' ? 'ConvLSTM2D State Forecast' : viewMode === 'climatology' ? '15-Year Historical Normal' : 'Projected Climate Anomaly'} — {activeVariable.toUpperCase()}
               </h2>
             </div>
-            <span style={{ font: '11px "DM Mono", monospace', color: '#8c9790' }}>
-              Extents: 11.5°N–18.5°N, 74.0°E–78.6°E (~22 km/cell)
-            </span>
+            <div className="map-card-tools">
+              <div className="pill-group">
+                <button
+                  className={`pill-btn ${renderMode === '2d' ? 'active' : ''}`}
+                  onClick={() => setRenderMode('2d')}
+                >
+                  <Grid2x2 size={13} /> 2D
+                </button>
+                <button
+                  className={`pill-btn ${renderMode === '3d' ? 'active' : ''}`}
+                  onClick={() => setRenderMode('3d')}
+                >
+                  <Box size={13} /> 3D
+                </button>
+              </div>
+              <span className="card-meta">11.5°N–18.5°N · 74.0°E–78.6°E</span>
+            </div>
           </div>
 
           <div className="map-canvas-container">
+            {renderMode === '3d' ? (
+              <Suspense fallback={<div className="terrain3d-loading">Loading 3D terrain…</div>}>
+                <ForecastTerrain3D
+                  grid={activeGrid}
+                  tmaxGrid={currentDayData?.forecast_grid?.tmax}
+                  landMask={forecastData?.land_mask || KARNATAKA_LAND_MASK}
+                  variable={activeVariable}
+                  mode={viewMode}
+                  cities={CITIES}
+                  dateLabel={currentDayData?.date ? formatPrettyDate(currentDayData.date) : null}
+                />
+              </Suspense>
+            ) : (
+              <>
             {activeGrid && (
               <svg viewBox="0 0 32 32" className="raster-grid-svg" preserveAspectRatio="none">
                 {activeGrid.map((row, y) =>
@@ -980,7 +991,7 @@ export function ModelSimulation() {
                         width="1.05"
                         height="1.05"
                         fill={getColor(val, activeVariable, viewMode, isLand)}
-                        stroke={isHovered ? '#ffffff' : (isLand ? 'rgba(255, 255, 255, 0.12)' : 'none')}
+                        stroke={isHovered ? 'var(--accent)' : (isLand ? 'rgba(255, 255, 255, 0.10)' : 'none')}
                         strokeWidth={isHovered ? 0.35 : (isLand ? 0.05 : 0)}
                         onMouseEnter={() => {
                           if (!isLand) return
@@ -1001,8 +1012,8 @@ export function ModelSimulation() {
                   const svgY = 31 - city.y
                   return (
                     <g key={idx} transform={`translate(${city.x + 0.5}, ${svgY + 0.5})`}>
-                      <circle r="0.9" fill="#173c3a" stroke="#fff" strokeWidth="0.3" />
-                      <circle r="0.4" fill="#d16f43" />
+                      <circle r="0.85" className="city-pin" />
+                      <circle r="0.3" fill="var(--accent-warm)" />
                     </g>
                   )
                 })}
@@ -1020,34 +1031,51 @@ export function ModelSimulation() {
                   </strong>
                 </div>
                 {hoveredPixel.anomVal !== undefined && (
-                  <div style={{ fontSize: 10, color: '#a9c0b8', marginTop: 2 }}>
+                  <div className="pin-sub">
                     Anomaly vs Normal: {hoveredPixel.anomVal >= 0 ? `+${hoveredPixel.anomVal}` : hoveredPixel.anomVal} {activeVariable === 'rainfall' ? 'mm' : '°C'}
                   </div>
                 )}
               </div>
             )}
+              </>
+            )}
           </div>
 
+          {/* Legend bounds and gradient both come from dataColors.js, so the
+              swatch and its end labels always describe the scale the map
+              actually painted. */}
           <div className="legend-bar-wrap">
-            <span>{viewMode === 'anomaly' ? (activeVariable === 'rainfall' ? 'Drier (-25mm)' : 'Cooler (-4°C)') : 'Min (0.0)'}</span>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <span>Scale:</span>
-              <div className={`legend-gradient ${viewMode === 'anomaly' ? 'anomaly' : activeVariable}`} />
+            <span className="legend-end">{legendBounds(activeVariable, viewMode).low}</span>
+            <div className="legend-scale">
+              <div
+                className="legend-gradient"
+                style={{ background: legendGradient(activeVariable, viewMode) }}
+                role="img"
+                aria-label={`Colour scale from ${legendBounds(activeVariable, viewMode).low} to ${legendBounds(activeVariable, viewMode).high}`}
+              />
+              {legendTicks(activeVariable, viewMode) && (
+                <div className="legend-ticks">
+                  {legendTicks(activeVariable, viewMode).map((t) => (
+                    <span key={t}>{t}</span>
+                  ))}
+                </div>
+              )}
+              {viewMode === 'anomaly' && (
+                <div className="legend-ticks legend-ticks-diverging">
+                  <span>below</span><span>normal</span><span>above</span>
+                </div>
+              )}
             </div>
-            <span>
-              {viewMode === 'anomaly'
-                ? (activeVariable === 'rainfall' ? 'Wetter (+30mm)' : 'Warmer (+4°C)')
-                : `Max (${activeVariable === 'rainfall' ? '60+ mm' : activeVariable === 'tmax' ? '45°C' : '32°C'})`}
-            </span>
+            <span className="legend-end">{legendBounds(activeVariable, viewMode).high}</span>
           </div>
         </div>
 
         {/* 14-Day City Line Chart */}
         <div className="chart-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div className="card-row">
             <div>
               <span className="section-kicker">Regional Point Trajectory</span>
-              <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Karnataka District Forecast</h2>
+              <h2 className="card-title">Karnataka District Forecast</h2>
             </div>
             <select
               className="city-select"
@@ -1064,7 +1092,7 @@ export function ModelSimulation() {
             <Line data={lineChartData} options={lineChartOptions} />
           </div>
 
-          <div style={{ marginTop: 14, padding: '12px 14px', background: '#f5efe4', borderRadius: 4, font: '11px "DM Sans", sans-serif', color: '#5f7069' }}>
+          <div className="context-note">
             💡 <strong>State Pilot Context:</strong> High-resolution model tailored to Karnataka's Western Ghats orographic barrier, semi-arid North Interior, and Bengaluru urban plateau.
           </div>
         </div>
@@ -1121,105 +1149,73 @@ export function ModelSimulation() {
 
       {/* Comprehensive Accuracy & Benchmark Evaluation Table */}
       <section className="benchmark-table-card">
-        <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div className="map-card-header">
           <div>
             <span className="section-kicker">Empirical Verification (2023–2025 Test Split)</span>
-            <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Karnataka Pilot Benchmark Accuracy Comparison</h2>
+            <h2 className="card-title">Karnataka Pilot Benchmark Accuracy Comparison</h2>
           </div>
-          <span style={{ font: '11px "DM Mono", monospace', color: '#6a7972' }}>
+          <span className="card-meta">
             Evaluated across 1,083 out-of-sample forward sequences over Karnataka State
           </span>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="benchmark-table-wrap">
           <table className="benchmark-table">
+            <caption className="sr-only">
+              Forecast error by model and variable on the 2023-2025 test split.
+              Lower MAE and RMSE are better; higher R² is better.
+            </caption>
             <thead>
               <tr>
-                <th>Forecasting Model</th>
-                <th>Rainfall MAE</th>
-                <th>Rainfall RMSE</th>
-                <th>Rainfall R²</th>
-                <th>Tmax MAE</th>
-                <th>Tmax RMSE</th>
-                <th>Tmax R²</th>
-                <th>Tmin MAE</th>
-                <th>Tmin R²</th>
+                <th scope="col">Forecasting model</th>
+                {BENCH_COLUMNS.map((c) => (
+                  <th scope="col" key={c.key}>{c.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              <tr className="highlight-row">
-                <td>
-                  <strong>ConvLSTM2D (State Model)</strong>
-                  <span className="winner-tag">Neural Best</span>
-                </td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.MAE ?? '3.42'} mm</strong></td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.RMSE ?? '6.85'} mm</strong></td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.R2 ?? '0.28'}</strong></td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.MAE ?? '1.48'} °C</strong></td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.RMSE ?? '1.95'} °C</strong></td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.R2 ?? '0.82'}</strong></td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.MAE ?? '1.15'} °C</strong></td>
-                <td><strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.R2 ?? '0.89'}</strong></td>
-              </tr>
-              <tr>
-                <td>Climatology Baseline (15-Yr Mean)</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.rainfall?.MAE ?? '2.85'} mm</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.rainfall?.RMSE ?? '6.95'} mm</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.rainfall?.R2 ?? '0.22'}</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.tmax?.MAE ?? '1.35'} °C</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.tmax?.RMSE ?? '1.82'} °C</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.tmax?.R2 ?? '0.84'}</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.tmin?.MAE ?? '1.08'} °C</td>
-                <td>{benchmarkMetrics?.Climatology?.variables?.tmin?.R2 ?? '0.90'}</td>
-              </tr>
-              <tr>
-                <td>Persistence Baseline (Repeat Day 0)</td>
-                <td>{benchmarkMetrics?.Persistence?.variables?.rainfall?.MAE ?? '3.65'} mm</td>
-                <td style={{ color: '#dc2626' }}>{benchmarkMetrics?.Persistence?.variables?.rainfall?.RMSE ?? '9.42'} mm</td>
-                <td style={{ color: '#dc2626' }}>{benchmarkMetrics?.Persistence?.variables?.rainfall?.R2 ?? '-0.42'}</td>
-                <td>{benchmarkMetrics?.Persistence?.variables?.tmax?.MAE ?? '1.62'} °C</td>
-                <td>{benchmarkMetrics?.Persistence?.variables?.tmax?.RMSE ?? '2.24'} °C</td>
-                <td>{benchmarkMetrics?.Persistence?.variables?.tmax?.R2 ?? '0.76'}</td>
-                <td>{benchmarkMetrics?.Persistence?.variables?.tmin?.MAE ?? '1.25'} °C</td>
-                <td>{benchmarkMetrics?.Persistence?.variables?.tmin?.R2 ?? '0.84'}</td>
-              </tr>
-              <tr>
-                <td>Linear Trend Extrapolation</td>
-                <td>{benchmarkMetrics?.LinearTrend?.variables?.rainfall?.MAE ?? '3.82'} mm</td>
-                <td>{benchmarkMetrics?.LinearTrend?.variables?.rainfall?.RMSE ?? '8.54'} mm</td>
-                <td style={{ color: '#dc2626' }}>{benchmarkMetrics?.LinearTrend?.variables?.rainfall?.R2 ?? '-0.18'}</td>
-                <td>{benchmarkMetrics?.LinearTrend?.variables?.tmax?.MAE ?? '1.85'} °C</td>
-                <td>{benchmarkMetrics?.LinearTrend?.variables?.tmax?.RMSE ?? '2.52'} °C</td>
-                <td>{benchmarkMetrics?.LinearTrend?.variables?.tmax?.R2 ?? '0.70'}</td>
-                <td>{benchmarkMetrics?.LinearTrend?.variables?.tmin?.MAE ?? '1.35'} °C</td>
-                <td>{benchmarkMetrics?.LinearTrend?.variables?.tmin?.R2 ?? '0.82'}</td>
-              </tr>
+              {BENCH_ROWS.map((row) => (
+                <tr key={row.key} className={row.key === 'ConvLSTM2D' ? 'highlight-row' : ''}>
+                  <th scope="row">
+                    <span className="model-cell">
+                      <i style={{ background: seriesFor(row.key) }} />
+                      {row.label}
+                    </span>
+                  </th>
+                  {BENCH_COLUMNS.map((c) => {
+                    const v = benchValue(benchmarkMetrics, row.key, c)
+                    const best = bestModelFor(benchmarkMetrics, c)
+                    return (
+                      <td key={c.key}>
+                        {v === null ? '—' : `${v}${c.unit}`}
+                        {best === row.key && <span className="winner-tag">best</span>}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {/* Lead Time Horizon Degradation Insights */}
-        <div style={{ padding: '16px 20px', background: '#f8f6f0', borderTop: '1px solid var(--line)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-          <div>
-            <span style={{ font: '600 10px "DM Mono", monospace', textTransform: 'uppercase', color: '#78847e' }}>Day +1 (24h Lead)</span>
-            <div style={{ font: '600 15px Fraunces, serif', color: '#173c3a', marginTop: 2 }}>Rainfall: 3.12 mm · Tmax: 1.25°C</div>
-            <span style={{ fontSize: 11, color: '#6a7972' }}>Tmin R²: 0.94 · Tmax R²: 0.88</span>
-          </div>
-          <div>
-            <span style={{ font: '600 10px "DM Mono", monospace', textTransform: 'uppercase', color: '#78847e' }}>Day +3 (72h Lead)</span>
-            <div style={{ font: '600 15px Fraunces, serif', color: '#173c3a', marginTop: 2 }}>Rainfall: 3.28 mm · Tmax: 1.34°C</div>
-            <span style={{ fontSize: 11, color: '#6a7972' }}>Tmin R²: 0.92 · Tmax R²: 0.86</span>
-          </div>
-          <div>
-            <span style={{ font: '600 10px "DM Mono", monospace', textTransform: 'uppercase', color: '#78847e' }}>Day +7 (1-Week Lead)</span>
-            <div style={{ font: '600 15px Fraunces, serif', color: '#173c3a', marginTop: 2 }}>Rainfall: 3.48 mm · Tmax: 1.52°C</div>
-            <span style={{ fontSize: 11, color: '#6a7972' }}>Tmin R²: 0.89 · Tmax R²: 0.82</span>
-          </div>
-          <div>
-            <span style={{ font: '600 10px "DM Mono", monospace', textTransform: 'uppercase', color: '#78847e' }}>Day +14 (2-Week Horizon)</span>
-            <div style={{ font: '600 15px Fraunces, serif', color: '#173c3a', marginTop: 2 }}>Rainfall: 3.75 mm · Tmax: 1.78°C</div>
-            <span style={{ fontSize: 11, color: '#6a7972' }}>Tmin R²: 0.86 · Tmax R²: 0.74</span>
-          </div>
+        {/* Lead-time degradation, read from the loaded metrics rather than
+            transcribed by hand — these are presented as empirical results, so
+            they must track the evaluation output. */}
+        <div className="lead-strip">
+          {LEAD_DAYS.map((d) => {
+            const lt = benchmarkMetrics?.ConvLSTM2D?.lead_time_metrics?.[`day_${d.day}`]
+            return (
+              <div key={d.day}>
+                <span className="stat-label">Day +{d.day} ({d.label})</span>
+                <div className="stat-value">
+                  Rainfall {fmt(lt?.rainfall?.MAE)} mm · Tmax {fmt(lt?.tmax?.MAE)} °C
+                </div>
+                <span className="stat-sub">
+                  Tmax R² {fmt(lt?.tmax?.R2)} · Tmin R² {fmt(lt?.tmin?.R2)}
+                </span>
+              </div>
+            )
+          })}
         </div>
       </section>
     </div>

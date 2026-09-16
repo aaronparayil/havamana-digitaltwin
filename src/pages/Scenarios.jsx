@@ -5,16 +5,21 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, Title, Tooltip as ChartTooltip, Legend, Filler
 } from 'chart.js'
+import { chartOptions as sharedChartOptions, lineSeries } from '../styles/chartTheme'
+import { scenarioColor } from '../styles/dataColors'
+import { API_BASE } from '../hooks/useApiHealth'
 import '../pages/ModelSimulation.css'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
 
 const SCENARIO_DEFS = [
-  { id: 'immediate', label: '14-Day State Lookahead', color: '#2563eb' },
-  { id: 'monsoon_surge', label: 'Monsoon Surge (Ghats & Coast)', color: '#059669' },
-  { id: 'north_heatwave', label: 'North Karnataka Heatwave', color: '#d97706' },
-  { id: 'post_monsoon', label: 'Post-Monsoon Showers', color: '#7c3aed' },
-  { id: 'upcoming_winter', label: 'Winter Cool Front', color: '#0891b2' },
+  // Colours come from the validated categorical palette, keyed by scenario id
+  // so a scenario keeps its hue no matter which others are on screen.
+  { id: 'immediate', label: '14-Day State Lookahead', color: scenarioColor('immediate') },
+  { id: 'monsoon_surge', label: 'Monsoon Surge (Ghats & Coast)', color: scenarioColor('monsoon_surge') },
+  { id: 'north_heatwave', label: 'North Karnataka Heatwave', color: scenarioColor('north_heatwave') },
+  { id: 'post_monsoon', label: 'Post-Monsoon Showers', color: scenarioColor('post_monsoon') },
+  { id: 'upcoming_winter', label: 'Winter Cool Front', color: scenarioColor('upcoming_winter') },
 ]
 
 const VARIABLES = ['rainfall', 'tmax', 'tmin']
@@ -37,7 +42,7 @@ export function Scenarios() {
       try {
         const results = await Promise.all(
           SCENARIO_DEFS.map((s) =>
-            fetch(`http://localhost:5005/api/forecast/future?scenario=${s.id}`).then((r) => {
+            fetch(`${API_BASE}/api/forecast/future?scenario=${s.id}`).then((r) => {
               if (!r.ok) throw new Error('Request failed')
               return r.json()
             })
@@ -93,34 +98,21 @@ export function Scenarios() {
     const labels = Array.from({ length: 14 }, (_, i) => `+${i + 1}d`)
     return {
       labels,
-      datasets: SCENARIO_DEFS.map((s) => ({
-        label: s.label,
-        data: scenarioData[s.id]?.city_timeseries?.[selectedCity]?.[`pred_${activeVariable}`] || [],
-        borderColor: s.color,
-        backgroundColor: 'transparent',
-        borderWidth: 2.5,
-        tension: 0.3,
-        pointRadius: 2,
-      }))
+      datasets: SCENARIO_DEFS.map((s) =>
+        lineSeries(
+          s.label,
+          scenarioData[s.id]?.city_timeseries?.[selectedCity]?.[`pred_${activeVariable}`] || [],
+          s.color
+        )
+      )
     }
   }, [scenarioData, selectedCity, activeVariable])
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top', labels: { boxWidth: 10, font: { family: 'DM Sans', size: 10 } } },
-      tooltip: { backgroundColor: '#173c3a', padding: 10 }
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: '#84908b', font: { family: 'DM Mono', size: 10 } } },
-      y: {
-        grid: { color: '#e8e5dc' },
-        ticks: { color: '#84908b', font: { family: 'DM Mono', size: 10 } },
-        title: { display: true, text: VARIABLE_LABELS[activeVariable], font: { family: 'DM Sans', size: 11, weight: 'bold' } }
-      }
-    }
-  }
+  // Five series, so the legend stays on — identity is never colour-alone.
+  const chartOptions = sharedChartOptions({
+    yTitle: VARIABLE_LABELS[activeVariable],
+    beginAtZero: activeVariable === 'rainfall',
+  })
 
   return (
     <div className="sim-wrap">
@@ -129,7 +121,7 @@ export function Scenarios() {
           <div className="sim-badge-row">
             <span className="sim-badge active"><i /> Karnataka High-Resolution Pilot</span>
             {!loading && !error && (
-              <span className="sim-badge" style={{ background: '#deeee1', color: '#2b8a72' }}>
+              <span className="sim-badge is-live">
                 <CheckCircle2 size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
                 Live Neural API
               </span>
@@ -164,12 +156,12 @@ export function Scenarios() {
       </section>
 
       {error && (
-        <section className="timeline-card" style={{ color: '#a15c2e', font: '13px "DM Sans", sans-serif' }}>
+        <section className="sim-state-card is-error">
           ⚠️ {error}
         </section>
       )}
       {loading && !error && (
-        <section className="timeline-card" style={{ font: '13px "DM Sans", sans-serif', color: '#6a7972', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <section className="sim-state-card">
           <RefreshCw size={14} className="spin" /> Loading all scenarios...
         </section>
       )}
@@ -177,11 +169,11 @@ export function Scenarios() {
       {!loading && !error && scenarioData && (
         <>
           <section className="benchmark-table-card">
-            <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)' }}>
+            <div className="map-card-header">
               <span className="section-kicker">14-Day Averages — {selectedCity}</span>
-              <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>Scenario Summary</h2>
+              <h2 className="card-title">Scenario Summary</h2>
             </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="benchmark-table-wrap">
               <table className="benchmark-table">
                 <thead>
                   <tr>
@@ -196,10 +188,10 @@ export function Scenarios() {
                   {summaryRows.map((row) => (
                     <tr key={row.id}>
                       <td><strong style={{ color: row.color }}>●</strong> {row.label}</td>
-                      <td style={{ font: '11px "DM Mono", monospace' }}>{row.startDate} → {row.endDate}</td>
+                      <td className="card-meta">{row.startDate} → {row.endDate}</td>
                       <td>{row.predAvg?.toFixed(2) ?? '—'}</td>
                       <td>{row.climAvg?.toFixed(2) ?? '—'}</td>
-                      <td style={{ color: row.delta > 0 ? '#dc2626' : row.delta < 0 ? '#2563eb' : undefined }}>
+                      <td className={row.delta > 0 ? 'val-poor' : row.delta < 0 ? 'val-good' : undefined}>
                         {row.delta !== null ? (row.delta >= 0 ? `+${row.delta.toFixed(2)}` : row.delta.toFixed(2)) : '—'}
                       </td>
                     </tr>
@@ -211,7 +203,7 @@ export function Scenarios() {
 
           <div className="chart-card">
             <span className="section-kicker">14-Day Trajectories</span>
-            <h2 style={{ font: '600 18px Fraunces, serif', margin: '4px 0 0' }}>All Scenarios — {selectedCity}</h2>
+            <h2 className="card-title">All Scenarios — {selectedCity}</h2>
             <div className="chart-area" style={{ minHeight: 360 }}>
               {combinedChartData && <Line data={combinedChartData} options={chartOptions} />}
             </div>

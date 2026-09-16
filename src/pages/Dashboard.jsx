@@ -1,77 +1,324 @@
-import { useState } from 'react'
-import { CloudRain, Droplets, MapPinned, Thermometer, Wind, ChevronDown, MapPin } from 'lucide-react'
-import { CircleMarker, MapContainer, TileLayer, Tooltip as MapTooltip } from 'react-leaflet'
-import { Line } from 'react-chartjs-2'
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler } from 'chart.js'
+import { useState, useMemo, lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Thermometer, Wind, Gauge, Droplets, RefreshCw, AlertCircle, ArrowUpRight,
+} from 'lucide-react'
+import { useLiveConditions, aqiBand, AQI_BANDS } from '../hooks/useLiveConditions'
+import { LAYERS, LAYER_ORDER } from '../components/globeLayers'
+import '../components/Globe3D.css'
 import '../App.css'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler)
+// three.js is ~570 kB; load it only when this page is actually opened.
+const Globe3D = lazy(() =>
+  import('../components/Globe3D').then((m) => ({ default: m.Globe3D }))
+)
 
-const states = [
-  { name: 'Bengaluru', short: 'BLR', temp: '28.4°C', rain: '12 mm', risk: 'Moderate', air: 68, position: [12.97, 77.59], color: '#d18b3d' },
-  { name: 'Mysuru', short: 'MYS', temp: '27.8°C', rain: '16 mm', risk: 'Low', air: 47, position: [12.3, 76.65], color: '#2b8a72' },
-  { name: 'Mangaluru', short: 'MLR', temp: '29.1°C', rain: '38 mm', risk: 'High', air: 42, position: [12.91, 74.86], color: '#c35a4c' },
-  { name: 'Hubballi-Dharwad', short: 'HBL', temp: '30.2°C', rain: '7 mm', risk: 'Low', air: 55, position: [15.36, 75.12], color: '#2b8a72' },
-  { name: 'Belagavi', short: 'BLG', temp: '28.9°C', rain: '10 mm', risk: 'Moderate', air: 61, position: [15.85, 74.5], color: '#d18b3d' },
-  { name: 'Shivamogga', short: 'SHI', temp: '27.2°C', rain: '22 mm', risk: 'High', air: 38, position: [13.93, 75.57], color: '#c35a4c' },
-]
+const fmt = (v, digits = 1, suffix = '') =>
+  v === null || v === undefined || Number.isNaN(v) ? '—' : `${v.toFixed(digits)}${suffix}`
 
-const defaultMetrics = {
-  temperature: { label: 'Temperature', value: '31.8°C', delta: '+1.2°', note: 'vs. seasonal average', icon: Thermometer, color: 'orange', data: [28, 29, 29.5, 30, 30.8, 31, 31.8] },
-  rainfall: { label: 'Rainfall', value: '6 mm', delta: '-18%', note: 'last 7 days', icon: CloudRain, color: 'blue', data: [21, 14, 12, 18, 9, 13, 6] },
-  flood: { label: 'Flood risk', value: 'Moderate', delta: '3 districts', note: 'need attention', icon: Droplets, color: 'red', data: [42, 47, 44, 58, 61, 55, 64] },
-  air: { label: 'Air quality', value: '68 AQI', delta: 'Good', note: 'national average', icon: Wind, color: 'green', data: [72, 76, 69, 64, 71, 66, 68] },
+/** Compass point from a meteorological bearing, so wind direction is readable
+ *  without mentally converting degrees. */
+function compass(deg) {
+  if (deg === null || deg === undefined) return '—'
+  const pts = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+  return pts[Math.round(deg / 22.5) % 16]
 }
 
 export function Dashboard() {
-  const [activeMetric, setActiveMetric] = useState('temperature')
-  const [selectedState, setSelectedState] = useState('Bengaluru')
+  const { status, grid, globalGrid, cities, observedAt, error, fromCache, reload } = useLiveConditions()
+  const navigate = useNavigate()
+  const [layer, setLayer] = useState('wind')
+  const [sortKey, setSortKey] = useState('aqi')
 
   const today = new Date()
-  const dateStr = today.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const dateStr = today.toLocaleDateString('en-IN', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  })
 
-  const metric = defaultMetrics[activeMetric]
-  const selected = states.find((state) => state.name === selectedState) ?? states[0]
-  const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul']
-  const chartData = { labels, datasets: [{ data: metric.data, borderColor: '#d16f43', backgroundColor: 'rgba(209,111,67,.12)', fill: true, tension: .4, pointRadius: 3, pointBackgroundColor: '#f7f3ea', pointBorderColor: '#d16f43', pointBorderWidth: 2 }] }
-  const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { displayColors: false, backgroundColor: '#173c3a', padding: 10 } }, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: '#84908b' } }, y: { grid: { color: '#e8e5dc' }, border: { display: false }, ticks: { color: '#84908b' } } } }
+  /* National summary, computed from the live city readings rather than typed
+     in by hand. "—" whenever the upstream did not return a value. */
+  const summary = useMemo(() => {
+    const nums = (k) => cities.map((c) => c[k]).filter((v) => typeof v === 'number')
+    const avg = (a) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : null)
+    const max = (a) => (a.length ? Math.max(...a) : null)
 
-  return <div className="content-wrap">
-    <section className="page-heading"><div><div className="eyebrow">{dateStr} <span className="live-pill"><i /> Live conditions</span></div><h1>Bengaluru climate overview</h1><p>A clear view of the signals shaping Karnataka's pilot region, today and ahead.</p></div><button className="date-control">Last 7 days <ChevronDown size={16} /></button></section>
-    <section className="metrics-grid">{Object.entries(defaultMetrics).map(([key, item]) => { const Icon = item.icon; return <button key={key} className={`metric-card ${activeMetric === key ? 'selected' : ''}`} onClick={() => setActiveMetric(key)}><div className={`metric-icon ${item.color}`}><Icon size={19} /></div><div className="metric-copy"><span>{item.label}</span><strong>{item.value}</strong><small className={item.delta.startsWith('+') || item.delta === 'Moderate' ? 'warm' : 'cool'}>{item.delta} <em>{item.note}</em></small></div></button> })}</section>
-    <section className="primary-grid"><div className="panel map-panel"><div className="panel-heading"><div><span className="section-kicker">Pilot region / Karnataka</span><h2>Climate signals around Bengaluru</h2></div><button className="panel-action">Explore map <span>↗</span></button></div><div className="map-wrap"><MapContainer center={[14.2, 76.1]} zoom={7} scrollWheelZoom={false} zoomControl={false} attributionControl={false}><TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />{states.map((state) => <CircleMarker key={state.name} center={state.position} radius={state.name === selectedState ? 13 : 9} pathOptions={{ color: '#f7f3ea', weight: 3, fillColor: state.color, fillOpacity: .9 }} eventHandlers={{ click: () => setSelectedState(state.name) }}><MapTooltip direction="top"><strong>{state.name}</strong><br />{state.temp} · {state.risk} flood risk</MapTooltip></CircleMarker>)}</MapContainer><div className="map-legend"><span><i className="legend-low" /> Low</span><span><i className="legend-mid" /> Moderate</span><span><i className="legend-high" /> High</span></div></div><div className="map-footer"><span><i className="pulse" /> 6 locations reporting</span><button>View Bengaluru detail <span>→</span></button></div></div>
-      <div className="panel trend-panel"><div className="panel-heading"><div><span className="section-kicker">National trend</span><h2>{metric.label} over time</h2></div><button className="more-button" aria-label="More options">•••</button></div><div className="trend-summary"><strong>{metric.value}</strong><span className="trend-up">{metric.delta} <small>this week</small></span></div><div className="chart-box"><Line data={chartData} options={chartOptions} /></div><div className="chart-footer"><span>{labels[0] ?? 'Start'}</span><span>{labels[labels.length - 1] ?? 'End'}</span></div></div></section>
-    <section className="lower-grid"><div className="panel comparison-panel"><div className="panel-heading"><div><span className="section-kicker">Regional intelligence</span><h2>State comparison</h2></div><button className="panel-action">See all <span>↗</span></button></div><div className="table-head"><span>State</span><span>Temperature</span><span>Rainfall</span><span>Flood risk</span><span>AQI</span></div>{states.slice(0, 4).map((state) => <button className={`state-row ${state.name === selectedState ? 'active-row' : ''}`} key={state.name} onClick={() => setSelectedState(state.name)}><span className="state-name"><b>{state.short}</b>{state.name}</span><strong>{state.temp}</strong><span>{state.rain}</span><span className={`risk ${state.risk.toLowerCase()}`}>{state.risk}</span><span>{state.air}</span></button>)}</div><div className="panel selected-panel"><div className="selected-top"><span className="section-kicker">Selected state</span><span className="status-tag">● Monitoring</span></div><h2>{selected.name}</h2><p>Current conditions and near-term outlook</p><div className="state-highlight"><div><Thermometer size={17} /><strong>{selected.temp}</strong><span>Feels like 34°</span></div><div><CloudRain size={17} /><strong>{selected.rain}</strong><span>Rainfall this week</span></div></div><button className="full-button">Open {selected.name} profile <span>→</span></button></div></section>
-    <section className="ai-insights-panel">
-      <div className="panel">
+    const temps = nums('temp')
+    const winds = nums('windSpeed')
+    const aqis = nums('aqi')
+    const pms = nums('pm25')
+
+    const hottest = cities.reduce(
+      (best, c) => (typeof c.temp === 'number' && (!best || c.temp > best.temp) ? c : best), null)
+    const worstAir = cities.reduce(
+      (best, c) => (typeof c.aqi === 'number' && (!best || c.aqi > best.aqi) ? c : best), null)
+
+    return {
+      avgTemp: avg(temps),
+      hottest,
+      avgWind: avg(winds),
+      maxWind: max(winds),
+      worstAir,
+      avgPm: avg(pms),
+      maxAqi: max(aqis),
+    }
+  }, [cities])
+
+  const sortedCities = useMemo(() => {
+    const arr = [...cities]
+    arr.sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      if (typeof av !== 'number') return 1
+      if (typeof bv !== 'number') return -1
+      return sortKey === 'name' ? 0 : bv - av
+    })
+    return arr
+  }, [cities, sortKey])
+
+  const isLoading = status === 'loading'
+  const isError = status === 'error'
+  // A failed refresh while cached readings are on screen is a footnote, not an
+  // outage. Only claim the feed is unavailable when there is nothing to show.
+  const hasData = cities.length > 0
+  const isOutage = isError && !hasData
+  const isStale = isError && hasData
+
+  return (
+    <div className="content-wrap">
+      <section className="page-heading">
+        <div>
+          <div className="eyebrow">
+            {dateStr}
+            {hasData && (
+              <span className={`live-pill ${isStale ? 'is-stale' : ''}`}>
+                <i /> {isStale ? 'Last known' : fromCache ? 'Cached' : 'Live'}
+              </span>
+            )}
+          </div>
+          <h1>India live conditions</h1>
+          <p>
+            Observed wind, temperature and air quality across the subcontinent, streamed
+            from Open-Meteo. The Karnataka forecast model lives on the Model Simulation page.
+          </p>
+        </div>
+        <div className="refresh-cluster">
+          {isStale && (
+            <span className="refresh-note" title={error}>
+              Couldn&rsquo;t refresh &mdash; showing last reading
+            </span>
+          )}
+          <button className="date-control" onClick={reload} disabled={isLoading}>
+            <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
+            {isLoading ? 'Loading' : 'Refresh'}
+          </button>
+        </div>
+      </section>
+
+      {isOutage && (
+        <div className="demo-banner" style={{ marginBottom: 'var(--space-5)' }}>
+          <AlertCircle size={16} />
+          <div>
+            <strong>Live feed unavailable.</strong> {error}{' '}
+            The globe needs an internet connection; everything else on the site works offline.
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------- stat tiles */}
+      <section className="metrics-grid globe-stats">
+        <div className="metric-card">
+          <div className="metric-icon"><Thermometer size={18} /></div>
+          <div className="metric-copy">
+            <span>Mean temperature</span>
+            <strong>{fmt(summary.avgTemp, 1, '°C')}</strong>
+            <small>
+              {summary.hottest
+                ? <>warmest <em>{summary.hottest.name} {fmt(summary.hottest.temp, 1, '°C')}</em></>
+                : <em>across 8 cities</em>}
+            </small>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-icon"><Wind size={18} /></div>
+          <div className="metric-copy">
+            <span>Mean wind</span>
+            <strong>{fmt(summary.avgWind, 1, ' km/h')}</strong>
+            <small>peak <em>{fmt(summary.maxWind, 1, ' km/h')}</em></small>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-icon"><Gauge size={18} /></div>
+          <div className="metric-copy">
+            <span>Worst air quality</span>
+            <strong style={{ color: aqiBand(summary.maxAqi).color }}>
+              {summary.maxAqi ?? '—'} AQI
+            </strong>
+            <small>
+              {summary.worstAir
+                ? <>{summary.worstAir.name} · <em>{aqiBand(summary.maxAqi).label}</em></>
+                : <em>US AQI</em>}
+            </small>
+          </div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-icon"><Droplets size={18} /></div>
+          <div className="metric-copy">
+            <span>Mean PM2.5</span>
+            <strong>{fmt(summary.avgPm, 1)}</strong>
+            <small><em>µg/m³ across 8 cities</em></small>
+          </div>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------ globe */}
+      <section className="globe-hero">
+        <div className="globe-hero-bar">
+          <div>
+            <span className="section-kicker">Global · centred on India</span>
+            <h2>Live {LAYERS[layer].label.toLowerCase()}</h2>
+          </div>
+          <div className="pill-group">
+            {LAYER_ORDER.map((k) => (
+              <button
+                key={k}
+                className={`pill-btn ${layer === k ? 'active' : ''}`}
+                onClick={() => setLayer(k)}
+              >
+                {LAYERS[k].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="globe-stage">
+          <Suspense fallback={<div className="globe-loading">Loading globe…</div>}>
+            <Globe3D
+              grid={grid}
+              globalGrid={globalGrid}
+              cities={cities}
+              layer={layer}
+              observedAt={observedAt}
+              onDrillToModel={() => navigate('/model-test')}
+            />
+          </Suspense>
+        </div>
+
+        {/* Scale for whichever layer is painted. Generated from the same ramp
+            the globe uses, so swatch and surface can't disagree. */}
+        <div className="legend-bar-wrap">
+          <span className="legend-end">
+            {LAYERS[layer].domain[0]} {LAYERS[layer].unit}
+          </span>
+          <div className="legend-scale">
+            <div
+              className="legend-gradient"
+              style={{ background: `linear-gradient(to right, ${LAYERS[layer].ramp.join(', ')})` }}
+              role="img"
+              aria-label={`${LAYERS[layer].label} scale`}
+            />
+          </div>
+          <span className="legend-end">
+            {LAYERS[layer].domain[1]}+ {LAYERS[layer].unit}
+          </span>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------- city table */}
+      <section className="panel" style={{ marginTop: 'var(--space-4)' }}>
         <div className="panel-heading">
           <div>
-            <span className="section-kicker">AI-powered insights</span>
-            <h2>Digital twin intelligence</h2>
+            <span className="section-kicker">Major cities · observed now</span>
+            <h2>Live city readings</h2>
           </div>
-          <button className="panel-action">View all <span>↗</span></button>
-        </div>
-        <div className="insight-grid">
-          <div className="ai-insight-card">
-            <div className="insight-icon predict">🔮</div>
-            <h3>Predictive forecast</h3>
-            <p>ML models project a +1.4°C temperature anomaly for Karnataka over the next 30 days based on historical GRD data patterns.</p>
-            <span className="confidence">Model confidence: 87%</span>
-          </div>
-          <div className="ai-insight-card">
-            <div className="insight-icon anomaly">⚡</div>
-            <h3>Anomaly detected</h3>
-            <p>Rainfall deficit of 18% detected in Mangaluru region — significantly below the 10-year seasonal average for this period.</p>
-            <span className="confidence">Severity: Moderate</span>
-          </div>
-          <div className="ai-insight-card">
-            <div className="insight-icon recommend">💡</div>
-            <h3>Smart recommendation</h3>
-            <p>Based on current flood risk levels, the system recommends activating early-warning protocols for 3 vulnerable districts.</p>
-            <span className="confidence">Action priority: High</span>
+          <div className="pill-group">
+            <button
+              className={`pill-btn ${sortKey === 'aqi' ? 'active' : ''}`}
+              onClick={() => setSortKey('aqi')}
+            >
+              By AQI
+            </button>
+            <button
+              className={`pill-btn ${sortKey === 'temp' ? 'active' : ''}`}
+              onClick={() => setSortKey('temp')}
+            >
+              By temp
+            </button>
           </div>
         </div>
-      </div>
-    </section>
-  </div>
+
+        <div className="benchmark-table-wrap">
+          <table className="benchmark-table">
+            <caption className="sr-only">
+              Live observed conditions for eight Indian cities from Open-Meteo.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">City</th>
+                <th scope="col">Temp</th>
+                <th scope="col">Humidity</th>
+                <th scope="col">Wind</th>
+                <th scope="col">Direction</th>
+                <th scope="col">PM2.5</th>
+                <th scope="col">PM10</th>
+                <th scope="col">US AQI</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && (
+                <tr><td colSpan={8} style={{ textAlign: 'center' }}>Fetching live readings…</td></tr>
+              )}
+              {!isLoading && sortedCities.map((c) => {
+                const band = aqiBand(c.aqi)
+                return (
+                  <tr key={c.name}>
+                    <th scope="row">
+                      <span className="model-cell">
+                        <i style={{ background: band.color }} />
+                        {c.name}
+                      </span>
+                    </th>
+                    <td>{fmt(c.temp, 1, '°C')}</td>
+                    <td>{fmt(c.humidity, 0, '%')}</td>
+                    <td>{fmt(c.windSpeed, 1, ' km/h')}</td>
+                    <td>{compass(c.windDir)}</td>
+                    <td>{fmt(c.pm25, 1)}</td>
+                    <td>{fmt(c.pm10, 1)}</td>
+                    {/* Colour never carries the meaning alone — the band name
+                        is printed beside the number. */}
+                    <td>
+                      <span style={{ color: band.color, fontWeight: 600 }}>{c.aqi ?? '—'}</span>
+                      <span className="aqi-label">{band.label}</span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="aqi-key">
+          {AQI_BANDS.slice(0, 5).map((b) => (
+            <span key={b.label}>
+              <i style={{ background: b.color }} />
+              {b.label}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel source-note">
+        <p>
+          Wind, temperature, precipitation and air quality on this page are live observations
+          from <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo <ArrowUpRight size={12} /></a>,
+          sampled on a 13×12 lattice over the subcontinent and refreshed every 15 minutes.
+          Coastlines and borders are Natural Earth. None of it is produced by this project's
+          ConvLSTM model, which forecasts rainfall and temperature for Karnataka only —
+          see <strong>Model Simulation</strong> for that.
+        </p>
+      </section>
+    </div>
+  )
 }

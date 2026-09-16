@@ -1,3 +1,7 @@
+/* ==========================================================================
+   DatePicker
+   ========================================================================== */
+
 .date-picker-root {
   position: relative;
   display: inline-block;
@@ -6,37 +10,39 @@
 .date-picker-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--surface-2);
   color: var(--ink);
-  padding: 7px 12px;
+  padding: 7px var(--space-3);
   font-size: 12px;
   font-weight: 500;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
+  transition: border-color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease);
 }
 
 .date-picker-trigger:hover {
-  background: #ebe6da;
-  border-color: #c9c3b4;
+  background: var(--surface-3);
+  border-color: var(--line-strong);
 }
 
 .date-picker-trigger.open {
-  border-color: #2b8a72;
-  box-shadow: 0 0 0 3px rgba(43, 138, 114, 0.12);
-  background: var(--panel);
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+  background: var(--surface-2);
 }
 
 .date-picker-trigger svg:first-child {
-  color: #78847e;
+  color: var(--ink-muted);
   flex-shrink: 0;
 }
 
 .date-picker-chevron {
-  color: #9aa39c;
-  transition: transform 0.15s;
+  color: var(--ink-muted);
+  transition: transform var(--dur-fast) var(--ease);
   flex-shrink: 0;
 }
 
@@ -46,26 +52,35 @@
 
 .date-picker-panel {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + var(--space-2));
   left: 0;
   z-index: 60;
   width: 288px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(23, 60, 58, 0.16);
-  padding: 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-3);
+  animation: popover-in var(--dur) var(--ease-out);
+}
+
+/* Keeps the panel on screen when the trigger sits near the right edge. */
+@media (max-width: 520px) {
+  .date-picker-panel {
+    left: auto;
+    right: 0;
+  }
 }
 
 .date-picker-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
 }
 
 .date-picker-month-label {
-  font: 600 14px Fraunces, serif;
+  font: 600 14px/1 var(--font-sans);
   color: var(--ink);
 }
 
@@ -75,29 +90,30 @@
   border-radius: 50%;
   border: 0;
   background: transparent;
-  color: var(--ink);
+  color: var(--ink-secondary);
   display: grid;
   place-items: center;
-  cursor: pointer;
-  transition: background 0.12s;
+  transition: background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
 .date-picker-nav-btn:hover {
-  background: #ebe7de;
+  background: var(--surface-3);
+  color: var(--ink);
 }
 
 .date-picker-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 
 .date-picker-weekdays span {
   text-align: center;
-  font: 600 10px 'DM Mono', monospace;
+  font: var(--text-label);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: #8c9790;
+  letter-spacing: var(--label-spacing);
+  color: var(--ink-muted);
   padding-bottom: 6px;
 }
 
@@ -110,44 +126,49 @@
 .date-picker-cell {
   aspect-ratio: 1;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--ink);
-  font: 500 12px 'DM Mono', monospace;
+  color: var(--ink-secondary);
+  font: 500 12px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
   display: grid;
   place-items: center;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
 .date-picker-cell:hover:not(.disabled):not(.selected) {
-  background: #ebe7de;
+  background: var(--surface-3);
+  color: var(--ink);
 }
 
 .date-picker-cell.outside {
-  color: #c9c3b4;
+  color: var(--ink-faint);
 }
 
+/* "Today" is an outline, "selected" is a fill — two different affordances,
+   so both can be visible at once without competing. */
 .date-picker-cell.today {
-  box-shadow: inset 0 0 0 1.5px #2b8a72;
-  color: #2b8a72;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  color: var(--accent);
   font-weight: 700;
 }
 
 .date-picker-cell.selected {
-  background: var(--ink);
-  color: #fffdf8;
+  background: var(--accent);
+  color: var(--ink-inverse);
   font-weight: 700;
 }
 
 .date-picker-cell.disabled {
-  color: #d8d3c5;
+  color: var(--ink-faint);
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .date-picker-footer {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
   display: flex;
   justify-content: flex-start;
@@ -156,14 +177,14 @@
 .date-picker-today-btn {
   border: 0;
   background: transparent;
-  color: #d16f43;
-  font: 600 11px 'DM Mono', monospace;
+  color: var(--accent);
+  font: var(--text-label);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
-  cursor: pointer;
+  letter-spacing: var(--label-spacing);
   padding: 2px 0;
 }
 
 .date-picker-today-btn:hover {
+  color: var(--accent-hover);
   text-decoration: underline;
 }
