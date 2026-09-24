@@ -1,17 +1,20 @@
 import { spawn } from 'child_process'
 import { existsSync } from 'fs'
+import { join } from 'path'
 
-// Determine Python command for Windows / cross-platform
-const winPy311 = 'C:\\Users\\Abhay\\AppData\\Local\\Programs\\Python\\Python311\\python.exe'
-let pyCmd = 'py'
+// Pick the Python that has the backend's dependencies. A project virtualenv
+// (inside this folder or one level up) wins; otherwise fall back to PATH.
+// HAVAMANA_PYTHON overrides everything, for machines with an unusual setup.
+const isWin = process.platform === 'win32'
+const venvPython = ['.venv', '../.venv', 'venv', '../venv']
+  .map((dir) => join(process.cwd(), dir, isWin ? 'Scripts/python.exe' : 'bin/python'))
+  .find((p) => existsSync(p))
 
-if (process.platform === 'win32') {
-  if (!existsSync(winPy311)) {
-    pyCmd = 'python'
-  }
-} else {
-  pyCmd = 'python3'
-}
+const pyCmd = process.env.HAVAMANA_PYTHON
+  ? `"${process.env.HAVAMANA_PYTHON}"`
+  : venvPython
+    ? `"${venvPython}"`
+    : (isWin ? 'python' : 'python3')
 
 console.log('\x1b[36m%s\x1b[0m', '═══════════════════════════════════════════════════════════')
 console.log('\x1b[36m%s\x1b[0m', '⚡ Starting HavaMana Fullstack (Vite UI + Climate Neural API)')

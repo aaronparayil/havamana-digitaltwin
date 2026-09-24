@@ -42,7 +42,7 @@ export function TopBar({ status }) {
       </NavLink>
 
       <nav className={`topnav ${menuOpen ? 'is-open' : ''}`}>
-        {NAV.map(({ to, label, icon: Icon, end }) => (
+        {NAV.map(({ to, label, icon: Icon, end, soon }) => (
           <NavLink
             key={to}
             to={to}
@@ -52,6 +52,7 @@ export function TopBar({ status }) {
           >
             <Icon size={15} />
             {label}
+            {soon && <span className="soon-badge">Soon</span>}
           </NavLink>
         ))}
       </nav>

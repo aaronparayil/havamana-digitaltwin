@@ -262,3 +262,14 @@
     display: none;
   }
 }
+
+.soon-badge {
+  margin-left: 2px;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--accent-warm);
+  color: var(--accent-warm);
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

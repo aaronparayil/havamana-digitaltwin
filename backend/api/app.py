@@ -13,7 +13,7 @@ import config
 from data_pipeline.preprocessor import prepare_full_pipeline, inverse_transform
 from data_pipeline.sequence_builder import create_sliding_sequences
 from data_pipeline.calendar_features import encode_day_of_year
-from models.convlstm_model import WeightedClimateLoss, TemporalRepeat, BroadcastCalendar, LastTimestep, ClipToUnitRange
+from models.convlstm_model import load_trained_model
 from models.baselines import PersistenceBaseline, ClimatologyBaseline, LinearTrendBaseline
 
 KARNATAKA_CITIES = {
@@ -86,15 +86,7 @@ def initialize_service():
         # Load ConvLSTM model if available
         if config.MODEL_SAVE_PATH.exists():
             print(f"[API]: Loading trained model from {config.MODEL_SAVE_PATH}")
-            custom_objects = {
-                "WeightedClimateLoss": WeightedClimateLoss,
-                "TemporalRepeat": TemporalRepeat,
-                "BroadcastCalendar": BroadcastCalendar,
-                "LastTimestep": LastTimestep,
-                "ClipToUnitRange": ClipToUnitRange
-            }
-            MODEL = tf.keras.models.load_model(config.MODEL_SAVE_PATH, custom_objects=custom_objects)
-            print("[API]: Model loaded successfully!")
+            MODEL = load_trained_model(config.MODEL_SAVE_PATH, land_mask=LAND_MASK)
         else:
             print("[API]: Model weights not found yet. Running in baseline/simulation mode.")
     except Exception as e:
@@ -157,17 +149,11 @@ def get_metrics():
             data = json.load(f)
         return jsonify(data)
     else:
-        # Return representative initial benchmark structure if evaluate.py has not been run yet
+        # Never serve placeholder numbers: the UI presents these as empirical results.
         return jsonify({
             "status": "pending_evaluation",
-            "message": "Full evaluation metrics will be populated when training finishes.",
-            "benchmark_summary": {
-                "ConvLSTM2D": {"Rainfall_MAE": 4.12, "Tmax_MAE": 1.45, "Tmin_MAE": 1.18, "Rainfall_R2": 0.68, "Tmax_R2": 0.84, "Tmin_R2": 0.86},
-                "Persistence": {"Rainfall_MAE": 7.85, "Tmax_MAE": 2.92, "Tmin_MAE": 2.41, "Rainfall_R2": 0.22, "Tmax_R2": 0.51, "Tmin_R2": 0.54},
-                "Climatology": {"Rainfall_MAE": 6.30, "Tmax_MAE": 2.15, "Tmin_MAE": 1.82, "Rainfall_R2": 0.35, "Tmax_R2": 0.68, "Tmin_R2": 0.71},
-                "LinearTrend": {"Rainfall_MAE": 8.10, "Tmax_MAE": 3.10, "Tmin_MAE": 2.65, "Rainfall_R2": 0.18, "Tmax_R2": 0.44, "Tmin_R2": 0.49}
-            }
-        })
+            "message": "No evaluation results yet. Run `python backend/evaluate.py` to generate them."
+        }), 404
 
 
 @app.route("/api/forecast/date", methods=["GET"])
@@ -291,10 +277,31 @@ def get_forecast_by_date():
             "climatology_tmin": [round(float(clim_phys[d, cy, cx, 2]), 2) for d in range(config.SEQ_LEN_OUT)]
         }
         
+    # Skill over this one window, scored on land cells only. Lets the UI state
+    # plainly how the model did against the baselines for the dates on screen.
+    window_skill = None
+    if actual_phys is not None:
+        land = LAND_MASK > 0.5
+        candidates = {"ConvLSTM2D": pred_phys, "Climatology": clim_phys, "Persistence": pers_phys}
+        window_skill = {}
+        for label, days in (("first_3_days", 3), ("all_14_days", config.SEQ_LEN_OUT)):
+            window_skill[label] = {}
+            for ch, var in enumerate(config.CHANNELS):
+                truth = actual_phys[:days, ..., ch][:, land]
+                window_skill[label][var] = {
+                    name: round(float(np.mean(np.abs(grid[:days, ..., ch][:, land] - truth))), 3)
+                    for name, grid in candidates.items()
+                }
+                p = pred_phys[:days, ..., ch][:, land].ravel()
+                t = truth.ravel()
+                corr = np.corrcoef(p, t)[0, 1] if p.std() > 1e-6 and t.std() > 1e-6 else None
+                window_skill[label][var]["pattern_correlation"] = None if corr is None else round(float(corr), 3)
+
     return jsonify({
         "forecast_start_date": date_str,
         "horizon_days": config.SEQ_LEN_OUT,
         "has_ground_truth": has_actual,
+        "window_skill": window_skill,
         "days": days_data,
         "city_timeseries": city_forecasts
     })

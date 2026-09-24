@@ -16,28 +16,33 @@ const VARIABLES = ['rainfall', 'tmax', 'tmin']
 const VARIABLE_LABELS = { rainfall: 'Rainfall (mm)', tmax: 'Max Temp (°C)', tmin: 'Min Temp (°C)' }
 const MODEL_ORDER = ['ConvLSTM2D', 'Climatology', 'Persistence', 'LinearTrend']
 
-// Normalizes either the full evaluate.py output shape ({model: {variables: {rainfall: {MAE,RMSE,R2}}}})
-// or the API's lightweight fallback shape ({benchmark_summary: {model: {Rainfall_MAE, ...}}}) into one form.
 function normalizeMetrics(raw) {
-  if (!raw) return null
-  if (raw.ConvLSTM2D?.variables) {
-    return { models: raw, hasLeadTime: Boolean(raw.ConvLSTM2D.lead_time_metrics) }
-  }
-  if (raw.benchmark_summary) {
-    const models = {}
-    for (const [name, m] of Object.entries(raw.benchmark_summary)) {
-      models[name] = {
-        variables: {
-          rainfall: { MAE: m.Rainfall_MAE, R2: m.Rainfall_R2 },
-          tmax: { MAE: m.Tmax_MAE, R2: m.Tmax_R2 },
-          tmin: { MAE: m.Tmin_MAE, R2: m.Tmin_R2 }
-        }
-      }
-    }
-    return { models, hasLeadTime: false }
-  }
-  return null
+  if (!raw?.ConvLSTM2D?.variables) return null
+  return { models: raw, hasLeadTime: Boolean(raw.ConvLSTM2D.lead_time_metrics) }
 }
+
+// Winner per column, computed from the loaded numbers so a tag can never
+// contradict the table beside it.
+function bestFor(models, variable, stat) {
+  const lowerIsBetter = stat !== 'R2'
+  let best = null
+  let bestVal = null
+  for (const name of MODEL_ORDER) {
+    const v = models[name]?.variables?.[variable]?.[stat]
+    if (typeof v !== 'number') continue
+    if (bestVal === null || (lowerIsBetter ? v < bestVal : v > bestVal)) {
+      bestVal = v
+      best = name
+    }
+  }
+  return best
+}
+
+const TABLE_COLUMNS = [
+  ['rainfall', 'MAE', ' mm'], ['rainfall', 'R2', ''],
+  ['tmax', 'MAE', ' °C'], ['tmax', 'R2', ''],
+  ['tmin', 'MAE', ' °C'], ['tmin', 'R2', ''],
+]
 
 export function Comparisons() {
   const [rawMetrics, setRawMetrics] = useState(null)
@@ -45,6 +50,7 @@ export function Comparisons() {
   const [activeVariable, setActiveVariable] = useState('rainfall')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -56,6 +62,9 @@ export function Comparisons() {
           fetch(`${API_BASE}/api/metrics`),
           fetch(`${API_BASE}/api/forecast/date`)
         ])
+        if (metricsRes.status === 404) {
+          throw new Error('No evaluation results yet. Run python backend/evaluate.py to generate them.')
+        }
         if (!metricsRes.ok || !cityRes.ok) throw new Error('Request failed')
         const metrics = await metricsRes.json()
         const city = await cityRes.json()
@@ -77,7 +86,14 @@ export function Comparisons() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [attempt])
+
+  // While the API is still booting, keep trying on our own.
+  useEffect(() => {
+    if (!error) return undefined
+    const t = setTimeout(() => setAttempt((n) => n + 1), 5000)
+    return () => clearTimeout(t)
+  }, [error])
 
   const metrics = useMemo(() => normalizeMetrics(rawMetrics), [rawMetrics])
 
@@ -87,17 +103,16 @@ export function Comparisons() {
       (a, b) => parseInt(a.split('_')[1]) - parseInt(b.split('_')[1])
     )
     const labels = days.map((d) => `+${d.split('_')[1]}d`)
-    const maeByDay = days.map((d) => metrics.models.ConvLSTM2D.lead_time_metrics[d][activeVariable]?.MAE)
     return {
       labels,
-      datasets: [
+      datasets: MODEL_ORDER.filter((name) => metrics.models[name]?.lead_time_metrics).map((name) =>
         lineSeries(
-          `ConvLSTM2D ${VARIABLE_LABELS[activeVariable]} MAE`,
-          maeByDay,
-          seriesFor('ConvLSTM2D'),
-          { fill: true }
-        ),
-      ]
+          name,
+          days.map((d) => metrics.models[name].lead_time_metrics[d]?.[activeVariable]?.MAE),
+          seriesFor(name),
+          name === 'ConvLSTM2D' ? {} : { dashed: true }
+        )
+      ),
     }
   }, [metrics, activeVariable])
 
@@ -105,7 +120,7 @@ export function Comparisons() {
     if (!cityForecast?.city_timeseries) return null
     const cities = Object.keys(cityForecast.city_timeseries)
     return {
-      labels: cities,
+      labels: cities.map((c) => c.replace(' (Pilot)', '')),
       datasets: [
         barSeries(
           `Day +1 forecast — ${VARIABLE_LABELS[activeVariable]}`,
@@ -118,8 +133,22 @@ export function Comparisons() {
 
   // Single series on both charts here, so the legend box is off — each
   // panel title already names what is plotted.
-  const lineOpts = sharedChartOptions({ yTitle: `MAE (${activeVariable === 'rainfall' ? 'mm/day' : '°C'})`, showLegend: false })
-  const barOpts = sharedChartOptions({ yTitle: VARIABLE_LABELS[activeVariable], showLegend: false, beginAtZero: true, crosshair: false })
+  // Four series on the lead-time chart, so its legend stays on. The bar chart
+  // has one series and its title names it.
+  const lineOpts = sharedChartOptions({ yTitle: `MAE (${activeVariable === 'rainfall' ? 'mm/day' : '°C'})` })
+  const baseBarOpts = sharedChartOptions({ yTitle: VARIABLE_LABELS[activeVariable], showLegend: false, beginAtZero: true, crosshair: false })
+  // Seven city names do not fit horizontally; tilt them rather than let
+  // Chart.js silently drop every other label.
+  const barOpts = {
+    ...baseBarOpts,
+    scales: {
+      ...baseBarOpts.scales,
+      x: {
+        ...baseBarOpts.scales?.x,
+        ticks: { ...baseBarOpts.scales?.x?.ticks, autoSkip: false, maxRotation: 35, minRotation: 0 },
+      },
+    },
+  }
 
   return (
     <div className="sim-wrap">
@@ -130,13 +159,13 @@ export function Comparisons() {
             {!loading && !error && (
               <span className="sim-badge is-live">
                 <CheckCircle2 size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
-                Live Neural API
+                Test split 2023–2025 · 1,083 forecasts
               </span>
             )}
           </div>
           <h1 className="sim-title">Model &amp; Regional Comparisons</h1>
           <p className="sim-subtitle">
-            How the ConvLSTM2D model stacks up against baseline forecasters, how accuracy decays over the 14-day horizon, and how districts compare today.
+            How the ConvLSTM2D model stacks up against three baseline forecasters on three years of data it never saw during training, and how accuracy changes over the 14-day horizon.
           </p>
         </div>
       </section>
@@ -156,7 +185,11 @@ export function Comparisons() {
 
       {error && (
         <section className="sim-state-card is-error">
-          ⚠️ {error}
+          ⚠️ {error}{' '}
+          <button className="preset-btn" onClick={() => setAttempt((n) => n + 1)}>
+            <RefreshCw size={13} /> Retry now
+          </button>
+          <span className="card-meta"> Retrying automatically…</span>
         </section>
       )}
       {loading && !error && (
@@ -170,8 +203,11 @@ export function Comparisons() {
           {/* Benchmark Table */}
           <section className="benchmark-table-card">
             <div className="map-card-header">
-              <span className="section-kicker">Empirical Verification (2023–2025 Test Split)</span>
-              <h2 className="card-title">Forecasting Model Benchmark</h2>
+              <div>
+                <span className="section-kicker">Empirical Verification (2023–2025 Test Split)</span>
+                <h2 className="card-title">Forecasting Model Benchmark</h2>
+              </div>
+              <span className="card-meta">Lower MAE is better · higher R² is better</span>
             </div>
             <div className="benchmark-table-wrap">
               <table className="benchmark-table">
@@ -194,14 +230,17 @@ export function Comparisons() {
                       <tr key={name} className={isModel ? 'highlight-row' : ''}>
                         <td>
                           <strong>{name}</strong>
-                          {isModel && <span className="winner-tag">Neural Model</span>}
+                          {isModel && <span className="model-tag">our model</span>}
                         </td>
-                        <td>{m.variables.rainfall?.MAE?.toFixed(2) ?? '—'} mm</td>
-                        <td>{m.variables.rainfall?.R2?.toFixed(2) ?? '—'}</td>
-                        <td>{m.variables.tmax?.MAE?.toFixed(2) ?? '—'} °C</td>
-                        <td>{m.variables.tmax?.R2?.toFixed(2) ?? '—'}</td>
-                        <td>{m.variables.tmin?.MAE?.toFixed(2) ?? '—'} °C</td>
-                        <td>{m.variables.tmin?.R2?.toFixed(2) ?? '—'}</td>
+                        {TABLE_COLUMNS.map(([variable, stat, unit]) => {
+                          const v = m.variables[variable]?.[stat]
+                          return (
+                            <td key={`${variable}.${stat}`}>
+                              {typeof v === 'number' ? `${v.toFixed(2)}${unit}` : '—'}
+                              {bestFor(metrics.models, variable, stat) === name && <span className="winner-tag">best</span>}
+                            </td>
+                          )
+                        })}
                       </tr>
                     )
                   })}
@@ -210,11 +249,24 @@ export function Comparisons() {
             </div>
           </section>
 
+          <section className="takeaway-card">
+            <span className="section-kicker">Reading the results</span>
+            <p>
+              <strong>Temperature is where the model is strongest.</strong> It has the lowest overall minimum-temperature
+              error, and it is the best of the four models for Tmax from day 2 to day 5 and for Tmin from day 2 to day 7.
+              After about a week, climatology (the 15-year average for each date) catches up, as it does for any
+              weather model. <strong>Rainfall is the open problem.</strong> Averaged over every day, the model&rsquo;s error is
+              higher than the baselines&rsquo;. It forecasts light rain on many days that stay dry and underestimates
+              downpours. It still places heavy monsoon rain in the right districts (try the replays on the Model page),
+              and correcting that dry-day bias is a Phase 2 goal.
+            </p>
+          </section>
+
           <section className="sim-main-grid">
             {/* Lead-time degradation */}
             <div className="chart-card">
               <span className="section-kicker">Forecast Horizon Degradation</span>
-              <h2 className="card-title">Accuracy vs. Lead Day</h2>
+              <h2 className="card-title">Error vs. Lead Day — all models</h2>
               <div className="chart-area">
                 {leadTimeChartData ? (
                   <Line data={leadTimeChartData} options={lineOpts} />
@@ -228,7 +280,7 @@ export function Comparisons() {
 
             {/* City comparison */}
             <div className="chart-card">
-              <span className="section-kicker">Regional Snapshot</span>
+              <span className="section-kicker">Regional Snapshot · tomorrow</span>
               <h2 className="card-title">Karnataka Cities — Day +1 Forecast</h2>
               <div className="chart-area">
                 {cityBarData ? <Bar data={cityBarData} options={barOpts} /> : null}

@@ -13,6 +13,9 @@ const Globe3D = lazy(() =>
   import('../components/Globe3D').then((m) => ({ default: m.Globe3D }))
 )
 
+// Rows shown before "Show all", so the table doesn't push the page long.
+const TABLE_ROWS = 10
+
 const fmt = (v, digits = 1, suffix = '') =>
   v === null || v === undefined || Number.isNaN(v) ? '—' : `${v.toFixed(digits)}${suffix}`
 
@@ -29,6 +32,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const [layer, setLayer] = useState('wind')
   const [sortKey, setSortKey] = useState('aqi')
+  const [showAll, setShowAll] = useState(false)
 
   const today = new Date()
   const dateStr = today.toLocaleDateString('en-IN', {
@@ -134,7 +138,7 @@ export function Dashboard() {
             <small>
               {summary.hottest
                 ? <>warmest <em>{summary.hottest.name} {fmt(summary.hottest.temp, 1, '°C')}</em></>
-                : <em>across 8 cities</em>}
+                : <em>across {cities.length || '—'} cities</em>}
             </small>
           </div>
         </div>
@@ -168,7 +172,7 @@ export function Dashboard() {
           <div className="metric-copy">
             <span>Mean PM2.5</span>
             <strong>{fmt(summary.avgPm, 1)}</strong>
-            <small><em>µg/m³ across 8 cities</em></small>
+            <small><em>µg/m³ across {cities.length || '—'} cities</em></small>
           </div>
         </div>
       </section>
@@ -252,7 +256,7 @@ export function Dashboard() {
         <div className="benchmark-table-wrap">
           <table className="benchmark-table">
             <caption className="sr-only">
-              Live observed conditions for eight Indian cities from Open-Meteo.
+              Live observed conditions for Indian cities from Open-Meteo.
             </caption>
             <thead>
               <tr>
@@ -270,7 +274,7 @@ export function Dashboard() {
               {isLoading && (
                 <tr><td colSpan={8} style={{ textAlign: 'center' }}>Fetching live readings…</td></tr>
               )}
-              {!isLoading && sortedCities.map((c) => {
+              {!isLoading && (showAll ? sortedCities : sortedCities.slice(0, TABLE_ROWS)).map((c) => {
                 const band = aqiBand(c.aqi)
                 return (
                   <tr key={c.name}>
@@ -278,6 +282,7 @@ export function Dashboard() {
                       <span className="model-cell">
                         <i style={{ background: band.color }} />
                         {c.name}
+                        <small className="city-state">{c.state}</small>
                       </span>
                     </th>
                     <td>{fmt(c.temp, 1, '°C')}</td>
@@ -299,6 +304,12 @@ export function Dashboard() {
           </table>
         </div>
 
+        {sortedCities.length > TABLE_ROWS && (
+          <button className="table-more" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? 'Show fewer' : `Show all ${sortedCities.length} cities`}
+          </button>
+        )}
+
         <div className="aqi-key">
           {AQI_BANDS.slice(0, 5).map((b) => (
             <span key={b.label}>
@@ -313,7 +324,7 @@ export function Dashboard() {
         <p>
           Wind, temperature, precipitation and air quality on this page are live observations
           from <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo <ArrowUpRight size={12} /></a>,
-          sampled on a 13×12 lattice over the subcontinent and refreshed every 15 minutes.
+          sampled on a global 11×18 lattice with a denser 8×7 inset over India, and refreshed every 15 minutes.
           Coastlines and borders are Natural Earth. None of it is produced by this project's
           ConvLSTM model, which forecasts rainfall and temperature for Karnataka only —
           see <strong>Model Simulation</strong> for that.

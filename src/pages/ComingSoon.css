@@ -1,0 +1,233 @@
+/* Phase 2 roadmap page. Built only from design tokens. */
+
+.soon-hero {
+  position: relative;
+  padding: var(--space-8) var(--space-7);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--accent-sunk) 0%, transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, var(--accent-warm-sunk) 0%, transparent 60%),
+    var(--surface-1);
+  overflow: hidden;
+}
+
+.soon-hero h1 {
+  margin: var(--space-3) 0 var(--space-3);
+  font: 700 clamp(30px, 4.4vw, 48px)/1.08 var(--font-sans);
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.soon-hero p {
+  max-width: 620px;
+  margin: 0;
+  font: 400 16px/1.6 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.soon-hero em {
+  font-style: normal;
+  color: var(--accent-warm);
+  font-weight: 600;
+}
+
+.soon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius-full);
+  background: var(--accent-sunk);
+  color: var(--accent);
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+}
+
+.soon-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: soon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes soon-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .soon-pill i { animation: none; }
+}
+
+.soon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.soon-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--ink-inverse);
+  font: 600 14px/1 var(--font-sans);
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.soon-cta:hover {
+  background: var(--accent-hover);
+}
+
+.soon-link {
+  color: var(--ink-secondary);
+  font: 500 14px/1 var(--font-sans);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--line-strong);
+}
+
+.soon-link:hover {
+  color: var(--ink);
+}
+
+/* Featured card spans two rows on the left; the four others fill a 2x2
+   block beside it, so five cards never leave an orphan. */
+.soon-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.soon-card {
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+
+.soon-card.is-featured {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  border-color: var(--accent-ring);
+  background:
+    linear-gradient(135deg, var(--accent-sunk), transparent 70%),
+    var(--surface-1);
+}
+
+.soon-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.soon-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.soon-tag {
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--accent-warm);
+}
+
+.soon-card h2 {
+  margin: var(--space-4) 0 var(--space-2);
+  font: 600 17px/1.3 var(--font-sans);
+  color: var(--ink);
+}
+
+.soon-card p {
+  margin: 0;
+  font: 400 13.5px/1.6 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.soon-card.is-featured h2 {
+  font-size: 22px;
+  margin-top: var(--space-6);
+}
+
+.soon-card.is-featured p {
+  font-size: 15px;
+  max-width: 420px;
+}
+
+@media (max-width: 1000px) and (min-width: 701px) {
+  .soon-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .soon-card.is-featured {
+    grid-row: auto;
+    grid-column: span 2;
+  }
+}
+
+.soon-shipped {
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+
+.soon-shipped ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.soon-shipped a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font: 500 14px/1.8 var(--font-sans);
+  text-decoration: none;
+}
+
+.soon-shipped a svg {
+  color: var(--status-good);
+  flex: none;
+}
+
+.soon-shipped a:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .soon-hero {
+    padding: var(--space-6) var(--space-5);
+  }
+
+  .soon-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .soon-card.is-featured {
+    grid-row: auto;
+  }
+}

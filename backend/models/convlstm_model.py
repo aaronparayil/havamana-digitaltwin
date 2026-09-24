@@ -229,6 +229,45 @@ def build_convlstm_model(
     return model
 
 
+def load_trained_model(path: Path, land_mask: Optional[np.ndarray] = None) -> tf.keras.Model:
+    """Loads the saved ConvLSTM2D, tolerating Keras version skew between machines.
+
+    A .keras archive stores the layer config serialized by whichever Keras saved it,
+    and older releases reject arguments newer ones add (a model saved on Keras 3.15
+    fails to deserialize on 3.10 over `GlorotUniform(input_axes=...)`). The weights
+    file inside the archive has no such dependency, so on failure the architecture
+    is rebuilt from code and only the weights are loaded into it.
+    """
+    custom_objects = {
+        "WeightedClimateLoss": WeightedClimateLoss,
+        "TemporalRepeat": TemporalRepeat,
+        "BroadcastCalendar": BroadcastCalendar,
+        "LastTimestep": LastTimestep,
+        "ClipToUnitRange": ClipToUnitRange
+    }
+    try:
+        model = tf.keras.models.load_model(path, custom_objects=custom_objects)
+        print("[Model]: Loaded full model archive.")
+        return model
+    except Exception as e:
+        print(f"[Model]: Full archive load failed ({type(e).__name__}); rebuilding architecture and loading weights only.")
+
+    import tempfile
+    import warnings
+    import zipfile
+
+    model = build_convlstm_model(land_mask=land_mask)
+    with tempfile.TemporaryDirectory() as tmp:
+        with zipfile.ZipFile(path) as archive:
+            archive.extract("model.weights.h5", tmp)
+        with warnings.catch_warnings():
+            # The saved optimizer state is irrelevant for inference.
+            warnings.simplefilter("ignore")
+            model.load_weights(str(Path(tmp) / "model.weights.h5"))
+    print("[Model]: Loaded weights into rebuilt architecture.")
+    return model
+
+
 if __name__ == "__main__":
     model = build_convlstm_model()
     model.summary()

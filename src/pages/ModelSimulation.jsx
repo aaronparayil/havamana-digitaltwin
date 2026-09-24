@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Play, Pause, RotateCcw, CloudRain, Thermometer,
-  CheckCircle2, AlertCircle, RefreshCw, Sparkles, TrendingUp, MapPin,
-  Grid2x2, Box
+  CheckCircle2, AlertCircle, RefreshCw, Grid2x2, Box
 } from 'lucide-react'
 import { Line } from 'react-chartjs-2'
 import {
@@ -24,11 +24,42 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, C
 
 // Future Forecasting Scenarios for Karnataka State Pilot
 const SCENARIOS = [
-  { id: 'immediate', label: '🔮 14-Day State Lookahead', desc: 'Continuous forward projection from latest Karnataka observations' },
+  { id: 'immediate', label: '🔮 Next 14 days', desc: 'Forward projection seeded from the most recent recorded observations for this time of year' },
   { id: 'monsoon_surge', label: '🌧️ Monsoon Surge (Ghats & Coast)', desc: 'Heavy precipitation over Coastal Karnataka and Malnad Western Ghats' },
   { id: 'north_heatwave', label: '☀️ North Karnataka Heatwave', desc: 'Pre-monsoon peak heat over Kalaburagi, Raichur, and Vijayapura' },
   { id: 'post_monsoon', label: '🌾 Post-Monsoon Showers', desc: 'Northeast monsoon convective showers over Bengaluru & South Interior' },
 ]
+
+// Held-out test-period events (2023-2025, never seen in training) that make
+// good live demos. Picked by scoring every test window against the recorded
+// IMD grids; the skill numbers shown on screen are recomputed by the API for
+// the loaded window, not copied from here.
+const FEATURED_REPLAYS = [
+  {
+    date: '2024-05-04',
+    variable: 'tmax',
+    city: 'Kalaburagi',
+    title: '2024 pre-monsoon heatwave',
+    blurb: 'North Karnataka peaked near 44 °C. Watch the model hold the heat dome in place.',
+  },
+  {
+    date: '2023-07-24',
+    variable: 'rainfall',
+    city: 'Mangaluru',
+    title: 'July 2023 Western Ghats deluge',
+    blurb: 'Coastal and Malnad districts under 20–100 mm/day. The model locates the rain band.',
+  },
+  {
+    date: '2024-07-24',
+    variable: 'rainfall',
+    city: 'Shivamogga',
+    title: 'Peak of the 2024 monsoon',
+    blurb: 'A second monsoon surge a year later, to show the first was not a one-off.',
+  },
+]
+
+const VAR_UNIT = { rainfall: 'mm', tmax: '°C', tmin: '°C' }
+const VAR_NAME = { rainfall: 'Rainfall', tmax: 'Max temp', tmin: 'Min temp' }
 
 // High-Resolution 32x32 Karnataka State Land Mask (Lat 11.5°N - 18.5°N, Lon 74.0°E - 78.6°E)
 // Row 0 is South (11.5°N), Row 31 is North (18.5°N)
@@ -141,20 +172,133 @@ function getTodayISO() {
   return `${yyyy}-${mm}-${dd}`
 }
 
+/** City dots with short labels, drawn in grid units on the 32x32 raster. */
+function CityMarkers({ selected, onSelect }) {
+  return CITIES.map((city) => {
+    const cx = city.x + 0.5
+    const cy = 31 - city.y + 0.5
+    const short = city.name.replace(' (Pilot)', '')
+    // Labels sit left of dots near the eastern edge so they stay inside the state.
+    const anchorEnd = city.x > 20
+    return (
+      <g
+        key={city.name}
+        className={`city-marker ${selected === city.name ? 'is-selected' : ''}`}
+        onClick={() => onSelect?.(city.name)}
+        role="button"
+        aria-label={`Show ${short} in the chart`}
+      >
+        <title>{`${short}: click to chart`}</title>
+        <circle cx={cx} cy={cy} r="1.3" className="city-hit" />
+        <circle cx={cx} cy={cy} r="0.42" className="city-pin" />
+        <text
+          x={anchorEnd ? cx - 0.8 : cx + 0.8}
+          y={cy + 0.35}
+          textAnchor={anchorEnd ? 'end' : 'start'}
+          className="city-pin-label"
+        >
+          {short}
+        </text>
+      </g>
+    )
+  })
+}
+
+/** Colour key for a raster; bounds and gradient come from dataColors.js. */
+function MapLegend({ variable, mode }) {
+  const bounds = legendBounds(variable, mode)
+  const ticks = legendTicks(variable, mode)
+  return (
+    <div className="legend-bar-wrap">
+      <span className="legend-end">{bounds.low}</span>
+      <div className="legend-scale">
+        <div
+          className="legend-gradient"
+          style={{ background: legendGradient(variable, mode) }}
+          role="img"
+          aria-label={`Colour scale from ${bounds.low} to ${bounds.high}`}
+        />
+        {ticks && (
+          <div className="legend-ticks">
+            {ticks.map((t) => <span key={t}>{t}</span>)}
+          </div>
+        )}
+      </div>
+      <span className="legend-end">{bounds.high}</span>
+    </div>
+  )
+}
+
+/** Forecast, recorded value and error for one hovered cell of a replay. */
+function ReplayCellReadout({ day, cell, variable }) {
+  const { x, y } = cell
+  const u = VAR_UNIT[variable]
+  const pick = (grid) => {
+    const v = grid?.[variable]?.[y]?.[x]
+    return typeof v === 'number' ? `${v.toFixed(1)} ${u}` : '—'
+  }
+  const lat = (11.5 + (y / 31) * 7.0).toFixed(2)
+  const lon = (74.0 + (x / 31) * 4.6).toFixed(2)
+  return (
+    <div className="pixel-hover-info">
+      <div>📍 <strong>{lat}°N, {lon}°E</strong></div>
+      <div>Forecast: <strong>{pick(day.forecast_grid)}</strong></div>
+      {day.actual_grid && <div>Recorded: <strong>{pick(day.actual_grid)}</strong></div>}
+      {day.error_grid && <div className="pin-sub">Error: {pick(day.error_grid)}</div>}
+    </div>
+  )
+}
+
+/** Plain-language verdict for one variable over a replayed window. */
+function SkillTile({ variable, skill }) {
+  if (!skill) return null
+  const model = skill.ConvLSTM2D
+  const clim = skill.Climatology
+  const gain = clim > 0 ? ((clim - model) / clim) * 100 : null
+  const beats = gain !== null && gain > 0
+  return (
+    <div className="skill-tile">
+      <span className="stat-label">{VAR_NAME[variable]} · first 3 days</span>
+      <div className="skill-main">
+        <strong>{model.toFixed(2)} {VAR_UNIT[variable]}</strong>
+        <span>model error</span>
+      </div>
+      <div className="skill-sub">
+        vs {clim.toFixed(2)} {VAR_UNIT[variable]} climatology ·{' '}
+        <em className={beats ? 'is-good' : 'is-poor'}>
+          {gain === null ? '—' : beats ? `${gain.toFixed(0)}% lower error` : `${Math.abs(gain).toFixed(0)}% higher error`}
+        </em>
+      </div>
+      {typeof skill.pattern_correlation === 'number' && (
+        <div className="skill-sub">
+          Spatial pattern match r = <strong>{skill.pattern_correlation.toFixed(2)}</strong>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ModelSimulation() {
+  // ?replay=YYYY-MM-DD opens straight into Replay & verify on that date, so a
+  // presenter can bookmark an event instead of clicking through to it.
+  const [searchParams] = useSearchParams()
+  const replayParam = searchParams.get('replay')
+  const replayPreset = FEATURED_REPLAYS.find((r) => r.date === replayParam)
+
   const [selectedScenario, setSelectedScenario] = useState('immediate')
-  const [activeVariable, setActiveVariable] = useState('rainfall') // 'rainfall' | 'tmax' | 'tmin'
+  const [activeVariable, setActiveVariable] = useState(replayPreset?.variable ?? 'rainfall') // 'rainfall' | 'tmax' | 'tmin'
   const [viewMode, setViewMode] = useState('forecast') // 'forecast' | 'climatology' | 'anomaly'
   const [leadDay, setLeadDay] = useState(1) // 1 to 14
   const [isPlaying, setIsPlaying] = useState(false)
-  const [selectedCity, setSelectedCity] = useState('Bengaluru (Pilot)')
+  const [selectedCity, setSelectedCity] = useState(replayPreset?.city ?? 'Bengaluru (Pilot)')
   const [hoveredPixel, setHoveredPixel] = useState(null)
+  const [dateHover, setDateHover] = useState(null) // { x, y } cell under the pointer in replay mode
   // 2D stays the precise reading surface; 3D is the showpiece. Neither replaces the other.
   const [renderMode, setRenderMode] = useState('2d') // '2d' | '3d'
 
   // Explorer mode: forward-looking scenarios vs. a specific calendar date lookup
-  const [explorerMode, setExplorerMode] = useState('future') // 'future' | 'date'
-  const [selectedDate, setSelectedDate] = useState(getTodayISO())
+  const [explorerMode, setExplorerMode] = useState(replayParam ? 'date' : 'future') // 'future' | 'date'
+  const [selectedDate, setSelectedDate] = useState(replayParam || getTodayISO())
   const [dateForecast, setDateForecast] = useState(null)
   const [dateLoading, setDateLoading] = useState(false)
   const [dateError, setDateError] = useState(null)
@@ -220,7 +364,7 @@ export function ModelSimulation() {
         const data = await res.json()
         setBenchmarkMetrics(data)
       }
-    } catch (e) {
+    } catch {
       // Real numbers from backend/outputs/metrics/evaluation_metrics_karnataka.json
       // (2023-2025 test split, 1,083 sequences). Kept in sync with that file —
       // the previous constants here were labelled "exact empirical" but did not
@@ -401,6 +545,48 @@ export function ModelSimulation() {
     })
   }
 
+  /* The API takes ~20 s to load TensorFlow and the dataset. Opening this page
+     before it is ready used to leave demo data on screen until someone
+     clicked Re-compute. Now it quietly retries and swaps in the real model
+     output the moment the API answers. */
+  useEffect(() => {
+    if (apiConnected) return undefined
+    const t = setInterval(() => {
+      if (explorerMode === 'future') fetchFutureForecast(selectedScenario)
+      else if (dateError) fetchDateForecast(selectedDate)
+      fetchMetrics()
+    }, 5000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiConnected, explorerMode, selectedScenario, dateError, selectedDate])
+
+  /* Keyboard control for presenting: Space plays/pauses, arrow keys step the
+     forecast day. Ignored while typing in a field or using a select. */
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const step = explorerMode === 'date' ? setDateLeadDay : setLeadDay
+      if (e.key === ' ') {
+        e.preventDefault()
+        // A focused button would otherwise also "click" on keyup.
+        if (e.target?.tagName === 'BUTTON') e.target.blur()
+        setIsPlaying((p) => !p)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        setIsPlaying(false)
+        step((d) => Math.min(14, d + 1))
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setIsPlaying(false)
+        step((d) => Math.max(1, d - 1))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [explorerMode])
+
   useEffect(() => {
     fetchFutureForecast(selectedScenario)
     fetchMetrics()
@@ -416,8 +602,9 @@ export function ModelSimulation() {
   // Playback timer
   useEffect(() => {
     if (isPlaying) {
+      const advance = explorerMode === 'date' ? setDateLeadDay : setLeadDay
       timerRef.current = setInterval(() => {
-        setLeadDay((prev) => (prev >= 14 ? 1 : prev + 1))
+        advance((prev) => (prev >= 14 ? 1 : prev + 1))
       }, 1000)
     } else {
       if (timerRef.current) clearInterval(timerRef.current)
@@ -425,7 +612,7 @@ export function ModelSimulation() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [isPlaying])
+  }, [isPlaying, explorerMode])
 
   // Current day grid data
   const currentDayData = useMemo(() => {
@@ -610,15 +797,15 @@ export function ModelSimulation() {
           <div className="pill-group">
             <button
               className={`pill-btn ${explorerMode === 'future' ? 'active' : ''}`}
-              onClick={() => setExplorerMode('future')}
+              onClick={() => { setIsPlaying(false); setExplorerMode('future') }}
             >
-              🔮 Future Scenarios
+              🔮 Forecast ahead
             </button>
             <button
               className={`pill-btn ${explorerMode === 'date' ? 'active' : ''}`}
-              onClick={() => setExplorerMode('date')}
+              onClick={() => { setIsPlaying(false); setExplorerMode('date') }}
             >
-              📅 Pick a Date
+              🎯 Replay &amp; verify
             </button>
           </div>
         </div>
@@ -626,6 +813,25 @@ export function ModelSimulation() {
 
       {explorerMode === 'date' ? (
       <>
+      <section className="replay-grid" aria-label="Featured replays">
+        {FEATURED_REPLAYS.map((r) => (
+          <button
+            key={r.date}
+            className={`replay-card ${selectedDate === r.date ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedDate(r.date)
+              setActiveVariable(r.variable)
+              setSelectedCity(r.city)
+              setDateViewMode('forecast')
+              fetchDateForecast(r.date)
+            }}
+          >
+            <span className="replay-date">{formatPrettyDate(r.date)} · unseen test data</span>
+            <strong>{r.title}</strong>
+            <span className="replay-blurb">{r.blurb}</span>
+          </button>
+        ))}
+      </section>
       {/* Date Explorer: forecast (and actual recorded climate, if available) for any chosen date, past or future */}
       <section className="sim-controls-bar">
         <div className="control-group">
@@ -689,7 +895,21 @@ export function ModelSimulation() {
           <section className="timeline-card">
             <div className="timeline-top">
               <div className="timeline-playback">
-                <div>
+                <button
+                  className="play-btn"
+                  onClick={() => setIsPlaying(!isPlaying)}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPlaying ? <Pause size={16} /> : <Play size={16} style={{ marginLeft: 2 }} />}
+                </button>
+                <button
+                  className="preset-btn"
+                  onClick={() => { setIsPlaying(false); setDateLeadDay(1) }}
+                  title="Reset to Day 1"
+                >
+                  <RotateCcw size={13} /> Reset
+                </button>
+                <div style={{ marginLeft: 8 }}>
                   <strong className="scrub-readout">
                     Forecast Horizon: Day +{dateLeadDay} of 14
                   </strong>
@@ -698,8 +918,11 @@ export function ModelSimulation() {
                   </span>
                 </div>
               </div>
-              <div className={`card-meta ${dateForecast.has_ground_truth ? 'is-good' : 'is-warning'}`}>
-                {dateForecast.has_ground_truth ? '● Ground truth available for this window' : '● Beyond recorded data — model forecast only'}
+              <div className="timeline-meta">
+                <span className="keyboard-hint"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> step</span>
+                <div className={`card-meta ${dateForecast.has_ground_truth ? 'is-good' : 'is-warning'}`}>
+                  {dateForecast.has_ground_truth ? '● Ground truth available for this window' : '● Beyond recorded data — model forecast only'}
+                </div>
               </div>
             </div>
             <div className="timeline-slider-wrap">
@@ -721,6 +944,21 @@ export function ModelSimulation() {
             </div>
           </section>
 
+          {dateForecast.window_skill && (
+            <section className="skill-strip">
+              <div className="skill-intro">
+                <span className="section-kicker">How the model did in this window</span>
+                <p>
+                  Forecast made from the 30 days before {formatPrettyDate(dateForecast.forecast_start_date)} only,
+                  then scored against what IMD actually recorded, averaged over all 432 land cells.
+                </p>
+              </div>
+              {['rainfall', 'tmax', 'tmin'].map((v) => (
+                <SkillTile key={v} variable={v} skill={dateForecast.window_skill.first_3_days?.[v]} />
+              ))}
+            </section>
+          )}
+
           <section className="sim-main-grid">
             <div className="map-card">
               <div className="map-card-header">
@@ -730,19 +968,47 @@ export function ModelSimulation() {
                     {dateViewMode === 'forecast' ? 'ConvLSTM2D Forecast' : dateViewMode === 'actual' ? 'Actual Recorded Climate' : 'Absolute Forecast Error'} — {activeVariable.toUpperCase()}
                   </h2>
                 </div>
-                <span className="card-meta">
-                  Extents: 11.5°N–18.5°N, 74.0°E–78.6°E (~22 km/cell)
-                </span>
+                <div className="map-card-tools">
+                  <div className="pill-group">
+                    <button
+                      className={`pill-btn ${renderMode === '2d' ? 'active' : ''}`}
+                      onClick={() => setRenderMode('2d')}
+                    >
+                      <Grid2x2 size={13} /> 2D
+                    </button>
+                    <button
+                      className={`pill-btn ${renderMode === '3d' ? 'active' : ''}`}
+                      onClick={() => setRenderMode('3d')}
+                    >
+                      <Box size={13} /> 3D
+                    </button>
+                  </div>
+                  <span className="card-meta">11.5°N–18.5°N · 74.0°E–78.6°E</span>
+                </div>
               </div>
 
               <div className="map-canvas-container">
-                {dateActiveGrid && (
+                {renderMode === '3d' && dateActiveGrid && (
+                  <Suspense fallback={<div className="terrain3d-loading">Loading 3D terrain…</div>}>
+                    <ForecastTerrain3D
+                      grid={dateActiveGrid}
+                      tmaxGrid={currentDateDay?.forecast_grid?.tmax}
+                      landMask={KARNATAKA_LAND_MASK}
+                      variable={activeVariable}
+                      mode={dateViewMode === 'error' ? 'error' : 'forecast'}
+                      cities={CITIES}
+                      dateLabel={currentDateDay?.date ? formatPrettyDate(currentDateDay.date) : null}
+                    />
+                  </Suspense>
+                )}
+                {renderMode === '2d' && dateActiveGrid && (
                   <svg viewBox="0 0 32 32" className="raster-grid-svg" preserveAspectRatio="none">
                     {dateActiveGrid.map((row, y) =>
                       row.map((val, x) => {
                         const activeMask = KARNATAKA_LAND_MASK
                         const isLand = Boolean(activeMask && activeMask[y] && activeMask[y][x] > 0.5)
                         const svgY = 31 - y
+                        const isHovered = dateHover && dateHover.x === x && dateHover.y === y
                         return (
                           <rect
                             key={`${x}-${y}`}
@@ -751,25 +1017,23 @@ export function ModelSimulation() {
                             width="1.05"
                             height="1.05"
                             fill={dateViewMode === 'error' ? getErrorColor(val, isLand) : getColor(val, activeVariable, 'forecast', isLand)}
-                            stroke={isLand ? 'rgba(255, 255, 255, 0.12)' : 'none'}
-                            strokeWidth={isLand ? 0.05 : 0}
-                            style={{ transition: 'fill 0.15s ease' }}
+                            stroke={isHovered ? 'var(--accent)' : (isLand ? 'rgba(255, 255, 255, 0.12)' : 'none')}
+                            strokeWidth={isHovered ? 0.35 : (isLand ? 0.05 : 0)}
+                            onMouseEnter={() => setDateHover(isLand ? { x, y } : null)}
+                            onMouseLeave={() => setDateHover(null)}
+                            style={{ cursor: isLand ? 'crosshair' : 'default', transition: 'fill 0.15s ease' }}
                           />
                         )
                       })
                     )}
-                    {CITIES.map((city, idx) => {
-                      const svgY = 31 - city.y
-                      return (
-                        <g key={idx} transform={`translate(${city.x + 0.5}, ${svgY + 0.5})`}>
-                          <circle r="0.85" className="city-pin" />
-                          <circle r="0.3" fill="var(--accent-warm)" />
-                        </g>
-                      )
-                    })}
+                    <CityMarkers selected={selectedCity} onSelect={setSelectedCity} />
                   </svg>
                 )}
+                {renderMode === '2d' && dateHover && currentDateDay && (
+                  <ReplayCellReadout day={currentDateDay} cell={dateHover} variable={activeVariable} />
+                )}
               </div>
+              <MapLegend variable={activeVariable} mode={dateViewMode === 'error' ? 'error' : 'forecast'} />
             </div>
 
             <div className="chart-card">
@@ -788,7 +1052,9 @@ export function ModelSimulation() {
                 <Line data={dateLineChartData} options={dateLineChartOptions} />
               </div>
               <div className="context-note">
-                💡 <strong>Date Explorer:</strong> Pick any date from 2010 onward — past or future. Historical dates show the model's forecast alongside what actually happened; dates beyond the recorded dataset show a forecast grounded in the most recent observations from that same time of year.
+                💡 <strong>Replay &amp; verify:</strong> pick any date from Jan 2010 to Dec 2025. The model sees only the 30 days
+                before it, forecasts 14 days ahead, and is scored against what IMD actually recorded. Dates from 2023 onward
+                were held out of training entirely, so they are a fair test.
               </div>
             </div>
           </section>
@@ -801,7 +1067,7 @@ export function ModelSimulation() {
       <section className="sim-controls-bar">
         {/* Scenarios */}
         <div className="control-group">
-          <span className="control-label">State Scenario:</span>
+          <span className="control-label">Outlook window:</span>
           {SCENARIOS.map((s) => (
             <button
               key={s.id}
@@ -900,8 +1166,11 @@ export function ModelSimulation() {
               </span>
             </div>
           </div>
-          <div className="card-meta is-good">
-            ● Karnataka Forward Projection: +{leadDay * 24}h Lookahead
+          <div className="timeline-meta">
+            <span className="keyboard-hint"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> step</span>
+            <div className="card-meta is-good">
+              ● Karnataka Forward Projection: +{leadDay * 24}h Lookahead
+            </div>
           </div>
         </div>
 
@@ -1008,15 +1277,7 @@ export function ModelSimulation() {
                   })
                 )}
                 {/* Overlay City Markers */}
-                {CITIES.map((city, idx) => {
-                  const svgY = 31 - city.y
-                  return (
-                    <g key={idx} transform={`translate(${city.x + 0.5}, ${svgY + 0.5})`}>
-                      <circle r="0.85" className="city-pin" />
-                      <circle r="0.3" fill="var(--accent-warm)" />
-                    </g>
-                  )
-                })}
+                <CityMarkers selected={selectedCity} onSelect={setSelectedCity} />
               </svg>
             )}
 
@@ -1093,7 +1354,10 @@ export function ModelSimulation() {
           </div>
 
           <div className="context-note">
-            💡 <strong>State Pilot Context:</strong> High-resolution model tailored to Karnataka's Western Ghats orographic barrier, semi-arid North Interior, and Bengaluru urban plateau.
+            💡 <strong>Where the inputs come from:</strong> the IMD record in this pilot runs to 31 Dec 2025. For dates
+            after that, the twin is seeded with the latest recorded 30 days from the same time of year, then
+            forecasts the calendar dates shown. A live IMD feed replaces this in Phase 2. To see the model scored
+            against reality, use <strong>Replay &amp; verify</strong>.
           </div>
         </div>
       </section>
@@ -1105,44 +1369,44 @@ export function ModelSimulation() {
         <div className="model-metric-card">
           <span className="metric-badge">Rainfall Forecast Accuracy</span>
           <div className="metric-val-row">
-            <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.MAE ?? '3.42'} mm</strong>
+            <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.MAE ?? '—'} mm</strong>
             <span>MAE</span>
           </div>
           <p className="metric-subtext">
-            RMSE: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.RMSE ?? '6.85'} mm</strong> · R²: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.R2 ?? '0.28'}</strong>
+            RMSE: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.RMSE ?? '—'} mm</strong> · R²: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.rainfall?.R2 ?? '—'}</strong>
           </p>
         </div>
 
         <div className="model-metric-card">
           <span className="metric-badge">Tmax Forecast Accuracy</span>
           <div className="metric-val-row">
-            <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.MAE ?? '1.48'} °C</strong>
+            <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.MAE ?? '—'} °C</strong>
             <span>MAE</span>
           </div>
           <p className="metric-subtext">
-            RMSE: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.RMSE ?? '1.95'} °C</strong> · R²: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.R2 ?? '0.82'}</strong>
+            RMSE: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.RMSE ?? '—'} °C</strong> · R²: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmax?.R2 ?? '—'}</strong>
           </p>
         </div>
 
         <div className="model-metric-card">
           <span className="metric-badge">Tmin Forecast Accuracy</span>
           <div className="metric-val-row">
-            <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.MAE ?? '1.15'} °C</strong>
+            <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.MAE ?? '—'} °C</strong>
             <span>MAE</span>
           </div>
           <p className="metric-subtext">
-            RMSE: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.RMSE ?? '1.52'} °C</strong> · R²: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.R2 ?? '0.89'}</strong>
+            RMSE: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.RMSE ?? '—'} °C</strong> · R²: <strong>{benchmarkMetrics?.ConvLSTM2D?.variables?.tmin?.R2 ?? '—'}</strong>
           </p>
         </div>
 
         <div className="model-metric-card">
-          <span className="metric-badge">Spatial Resolution Advantage</span>
+          <span className="metric-badge">Digital twin grid</span>
           <div className="metric-val-row">
             <strong>~22 km</strong>
             <span>Grid Spacing</span>
           </div>
           <p className="metric-subtext">
-            4× higher resolution than All-India domain, capturing microclimates
+            32×32 grid · <strong>432</strong> land cells · 30 days in → 14 days out
           </p>
         </div>
       </section>

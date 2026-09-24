@@ -17,10 +17,9 @@ import './Globe3D.css'
    -----------------
    Coastlines and borders come from Natural Earth via world-atlas, vendored
    into the repo so a demo works offline. Wind, temperature and air quality
-   are LIVE from Open-Meteo, sampled on a 13x12 lattice over the subcontinent
-   and bilinearly interpolated. The painted overlay stops where that lattice
-   stops, which is why colour covers India and fades out over the rest of the
-   world — the globe is not claiming knowledge it doesn't have.
+   are LIVE from Open-Meteo, sampled on a coarse global lattice with a denser
+   inset over India, and bilinearly interpolated. The overlay fades out toward
+   the poles, where the lattice stops.
 
    None of it is HavaMana's ConvLSTM output. That model is Karnataka-only and
    forecasts no wind or AQI whatsoever.
@@ -181,6 +180,39 @@ function buildGraticule(radius, color, opacity) {
   )
 }
 
+const fmt = (v, d = 0, suffix = '') =>
+  typeof v === 'number' && !Number.isNaN(v) ? `${v.toFixed(d)}${suffix}` : '—'
+
+/** Live readings for the city under the pointer. Flips to the other side of
+ *  the pointer near the right and bottom edges so it never clips. */
+function CityTooltip({ hover }) {
+  const { city, x, y, w, h } = hover
+  const band = aqiBand(city.aqi)
+  const flipX = x > w * 0.65
+  const style = {
+    left: x,
+    top: y,
+    transform: `translate(${flipX ? 'calc(-100% - 14px)' : '14px'}, ${y > h * 0.6 ? 'calc(-100% - 10px)' : '10px'})`,
+  }
+  return (
+    <div className="globe-tooltip" style={style} role="status">
+      <div className="globe-tooltip-head">
+        <strong>{city.name}</strong>
+        {city.state && <span>{city.state}</span>}
+      </div>
+      <dl>
+        <dt>Temp</dt><dd>{fmt(city.temp, 1, '°C')}</dd>
+        <dt>Humidity</dt><dd>{fmt(city.humidity, 0, '%')}</dd>
+        <dt>Wind</dt><dd>{fmt(city.windSpeed, 1, ' km/h')}</dd>
+        <dt>PM2.5</dt><dd>{fmt(city.pm25, 1, ' µg/m³')}</dd>
+      </dl>
+      <div className="globe-tooltip-aqi" style={{ '--band': band.color }}>
+        <i /> AQI <strong>{city.aqi ?? '—'}</strong> · {band.label}
+      </div>
+    </div>
+  )
+}
+
 export function Globe3D({
   grid,
   globalGrid,
@@ -195,6 +227,8 @@ export function Globe3D({
   const [flowOn, setFlowOn] = useState(true)
   const [view, setView] = useState('world')
   const [flying, setFlying] = useState(false)
+  // City under the pointer, with its position inside the globe box.
+  const [hover, setHover] = useState(null)
 
   const propsRef = useRef({ grid, globalGrid, layer, flowOn })
   propsRef.current = { grid, globalGrid, layer, flowOn }
@@ -388,6 +422,44 @@ export function Globe3D({
     }
 
     const tmpV = new THREE.Vector3()
+
+    /* -------------------------------------------------------- city hover
+       Each city carries an invisible, larger hit sphere so a 20px target is
+       easy to land on. The globe itself is in the raycast too: a city on the
+       far side is hidden behind the sphere, so it can never be hovered. */
+    const raycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2()
+    let hovered = null
+
+    const setHovered = (mesh) => {
+      if (hovered === mesh) return
+      if (hovered) hovered.userData.dot?.scale.setScalar(1)
+      hovered = mesh
+      if (mesh) mesh.userData.dot?.scale.setScalar(1.7)
+      // Hold the idle spin while a city is inspected, so it doesn't slide
+      // out from under the pointer.
+      controls.autoRotate = !mesh && st.spinAllowed && !reduceMotion
+      renderer.domElement.style.cursor = mesh ? 'pointer' : ''
+    }
+
+    const onPointerMove = (e) => {
+      if (flight) return
+      const rect = renderer.domElement.getBoundingClientRect()
+      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera(ndc, camera)
+      const targets = [sphere, ...cityGroup.children.filter((o) => o.userData.city)]
+      const hit = raycaster.intersectObjects(targets, false)[0]
+      const mesh = hit?.object.userData.city ? hit.object : null
+      setHovered(mesh)
+      setHover(mesh ? { city: mesh.userData.city, x: e.clientX - rect.left, y: e.clientY - rect.top, w: rect.width, h: rect.height } : null)
+    }
+    const onPointerLeave = () => {
+      setHovered(null)
+      setHover(null)
+    }
+    renderer.domElement.addEventListener('pointermove', onPointerMove)
+    renderer.domElement.addEventListener('pointerleave', onPointerLeave)
 
     /* ------------------------------------------------------ grid sampling */
     /** Bilinear lookup in one lattice. `wrap` handles the antimeridian. */
@@ -647,6 +719,8 @@ export function Globe3D({
       ro.disconnect()
       io.disconnect()
       clearTimeout(resumeTimer)
+      renderer.domElement.removeEventListener('pointermove', onPointerMove)
+      renderer.domElement.removeEventListener('pointerleave', onPointerLeave)
       controls.removeEventListener('start', holdSpin)
       controls.removeEventListener('end', releaseSpin)
       controls.dispose()
@@ -689,6 +763,9 @@ export function Globe3D({
     if (!st) return
     st.cityGroup.clear()
     const dotGeo = new THREE.SphereGeometry(0.022, 10, 10)
+    const haloGeo = new THREE.SphereGeometry(0.045, 10, 10)
+    const hitGeo = new THREE.SphereGeometry(0.07, 8, 8)
+    const hitMat = new THREE.MeshBasicMaterial({ visible: false })
     cities.forEach((c) => {
       const band = aqiBand(c.aqi)
       const m = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: band.color }))
@@ -696,11 +773,16 @@ export function Globe3D({
       st.cityGroup.add(m)
 
       const halo = new THREE.Mesh(
-        new THREE.SphereGeometry(0.045, 10, 10),
+        haloGeo,
         new THREE.MeshBasicMaterial({ color: band.color, transparent: true, opacity: 0.22 })
       )
       halo.position.copy(m.position)
       st.cityGroup.add(halo)
+
+      const hit = new THREE.Mesh(hitGeo, hitMat)
+      hit.position.copy(m.position)
+      hit.userData = { city: c, dot: m }
+      st.cityGroup.add(hit)
     })
   }, [cities])
 
@@ -776,7 +858,9 @@ export function Globe3D({
         <small>observed conditions — not ConvLSTM output</small>
       </div>
 
-      <div className="globe-hint">drag to rotate · scroll to zoom</div>
+      {hover && <CityTooltip hover={hover} />}
+
+      <div className="globe-hint">drag to rotate · scroll to zoom · hover a city</div>
     </div>
   )
 }

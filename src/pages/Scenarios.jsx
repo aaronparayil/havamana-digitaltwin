@@ -1,215 +1,93 @@
-import { useState, useEffect, useMemo } from 'react'
-import { RefreshCw, CheckCircle2 } from 'lucide-react'
-import { Line } from 'react-chartjs-2'
+import { Link } from 'react-router-dom'
 import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement,
-  LineElement, Title, Tooltip as ChartTooltip, Legend, Filler
-} from 'chart.js'
-import { chartOptions as sharedChartOptions, lineSeries } from '../styles/chartTheme'
-import { scenarioColor } from '../styles/dataColors'
-import { API_BASE } from '../hooks/useApiHealth'
-import '../pages/ModelSimulation.css'
+  SlidersHorizontal, Satellite, Map as MapIcon, Sprout, BellRing, ArrowRight, CheckCircle2,
+} from 'lucide-react'
+import './ComingSoon.css'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
+/* Phase 2 lives here. Nothing on this page is a working feature, and it says
+   so: every card is a roadmap item, and the only live links point back to
+   what Phase 1 actually ships. */
 
-const SCENARIO_DEFS = [
-  // Colours come from the validated categorical palette, keyed by scenario id
-  // so a scenario keeps its hue no matter which others are on screen.
-  { id: 'immediate', label: '14-Day State Lookahead', color: scenarioColor('immediate') },
-  { id: 'monsoon_surge', label: 'Monsoon Surge (Ghats & Coast)', color: scenarioColor('monsoon_surge') },
-  { id: 'north_heatwave', label: 'North Karnataka Heatwave', color: scenarioColor('north_heatwave') },
-  { id: 'post_monsoon', label: 'Post-Monsoon Showers', color: scenarioColor('post_monsoon') },
-  { id: 'upcoming_winter', label: 'Winter Cool Front', color: scenarioColor('upcoming_winter') },
+const SHIPPED = [
+  { label: 'Live India conditions on a 3D globe', to: '/' },
+  { label: 'ConvLSTM2D 14-day forecast for Karnataka', to: '/model-test' },
+  { label: 'Replay & verify against recorded IMD data', to: '/model-test' },
+  { label: 'Benchmark against three baseline forecasters', to: '/comparisons' },
 ]
 
-const VARIABLES = ['rainfall', 'tmax', 'tmin']
-const VARIABLE_LABELS = { rainfall: 'Rainfall (mm)', tmax: 'Max Temp (°C)', tmin: 'Min Temp (°C)' }
-
-const average = (arr) => (arr && arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null)
+const ROADMAP = [
+  {
+    icon: SlidersHorizontal,
+    title: 'What-If scenario simulator',
+    body: 'Push rainfall or temperature up or down, say a 20% weaker monsoon or a 2 °C hotter May, and watch the twin carry the change across the grid for 14 days.',
+    tag: 'Headline feature',
+  },
+  {
+    icon: Sprout,
+    title: 'Sector impact layers',
+    body: 'Turn forecasts into consequences for agriculture, water reservoirs and urban heat, so planners see what a scenario means on the ground.',
+  },
+  {
+    icon: Satellite,
+    title: 'INSAT satellite fusion',
+    body: 'Blend ISRO INSAT products with the IMD gauge grids to sharpen rainfall where stations are sparse.',
+  },
+  {
+    icon: MapIcon,
+    title: 'All-India scale',
+    body: 'Extend the Karnataka pilot to the national grid, one state domain at a time.',
+  },
+  {
+    icon: BellRing,
+    title: 'Early-warning alerts',
+    body: 'Flag heatwave and heavy-rain thresholds before they happen, district by district.',
+  },
+]
 
 export function Scenarios() {
-  const [scenarioData, setScenarioData] = useState(null) // { [scenarioId]: apiResponse }
-  const [activeVariable, setActiveVariable] = useState('rainfall')
-  const [selectedCity, setSelectedCity] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const results = await Promise.all(
-          SCENARIO_DEFS.map((s) =>
-            fetch(`${API_BASE}/api/forecast/future?scenario=${s.id}`).then((r) => {
-              if (!r.ok) throw new Error('Request failed')
-              return r.json()
-            })
-          )
-        )
-        if (cancelled) return
-        const data = {}
-        SCENARIO_DEFS.forEach((s, i) => { data[s.id] = results[i] })
-        setScenarioData(data)
-        const firstCities = Object.keys(results[0]?.city_timeseries || {})
-        setSelectedCity(firstCities.includes('Bengaluru (Pilot)') ? 'Bengaluru (Pilot)' : firstCities[0])
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err.message === 'Failed to fetch'
-              ? 'Could not reach the forecasting API. Start the backend (python backend/api/app.py) to compare scenarios.'
-              : err.message
-          )
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
-
-  const cityOptions = useMemo(() => {
-    if (!scenarioData) return []
-    return Object.keys(scenarioData.immediate?.city_timeseries || {})
-  }, [scenarioData])
-
-  const summaryRows = useMemo(() => {
-    if (!scenarioData || !selectedCity) return []
-    return SCENARIO_DEFS.map((s) => {
-      const resp = scenarioData[s.id]
-      const cityTs = resp?.city_timeseries?.[selectedCity]
-      const predAvg = average(cityTs?.[`pred_${activeVariable}`])
-      const climAvg = average(cityTs?.[`climatology_${activeVariable}`])
-      return {
-        ...s,
-        startDate: resp?.forecast_start_date,
-        endDate: resp?.forecast_end_date,
-        predAvg,
-        climAvg,
-        delta: (predAvg !== null && climAvg !== null) ? predAvg - climAvg : null
-      }
-    })
-  }, [scenarioData, selectedCity, activeVariable])
-
-  const combinedChartData = useMemo(() => {
-    if (!scenarioData || !selectedCity) return null
-    const labels = Array.from({ length: 14 }, (_, i) => `+${i + 1}d`)
-    return {
-      labels,
-      datasets: SCENARIO_DEFS.map((s) =>
-        lineSeries(
-          s.label,
-          scenarioData[s.id]?.city_timeseries?.[selectedCity]?.[`pred_${activeVariable}`] || [],
-          s.color
-        )
-      )
-    }
-  }, [scenarioData, selectedCity, activeVariable])
-
-  // Five series, so the legend stays on — identity is never colour-alone.
-  const chartOptions = sharedChartOptions({
-    yTitle: VARIABLE_LABELS[activeVariable],
-    beginAtZero: activeVariable === 'rainfall',
-  })
-
   return (
-    <div className="sim-wrap">
-      <section className="sim-header">
-        <div>
-          <div className="sim-badge-row">
-            <span className="sim-badge active"><i /> Karnataka High-Resolution Pilot</span>
-            {!loading && !error && (
-              <span className="sim-badge is-live">
-                <CheckCircle2 size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
-                Live Neural API
-              </span>
-            )}
-          </div>
-          <h1 className="sim-title">Future Scenario Comparison</h1>
-          <p className="sim-subtitle">
-            Side-by-side outlook across all forward-looking scenarios, so you can see how Karnataka's next monsoon, heatwave, or winter front compares.
-          </p>
+    <div className="content-wrap soon-wrap">
+      <section className="soon-hero">
+        <span className="soon-pill"><i /> Coming soon · Phase 2</span>
+        <h1>The What-If simulator</h1>
+        <p>
+          Phase 1 built a digital twin that can see Karnataka&rsquo;s climate and forecast it.
+          Phase 2 lets you <em>change</em> it: adjust the inputs, run the twin forward, and
+          compare the outcome against the forecast.
+        </p>
+        <div className="soon-actions">
+          <Link to="/model-test" className="soon-cta">
+            Try the live forecast <ArrowRight size={15} />
+          </Link>
+          <Link to="/comparisons" className="soon-link">See model accuracy</Link>
         </div>
       </section>
 
-      <section className="sim-controls-bar">
-        <div className="control-group">
-          <span className="control-label">Variable:</span>
-          <div className="pill-group">
-            {VARIABLES.map((v) => (
-              <button key={v} className={`pill-btn ${activeVariable === v ? 'active' : ''}`} onClick={() => setActiveVariable(v)}>
-                {VARIABLE_LABELS[v]}
-              </button>
-            ))}
-          </div>
-        </div>
-        {cityOptions.length > 0 && (
-          <div className="control-group">
-            <span className="control-label">City:</span>
-            <select className="city-select" value={selectedCity || ''} onChange={(e) => setSelectedCity(e.target.value)}>
-              {cityOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-        )}
+      <section className="soon-grid" aria-label="Phase 2 roadmap">
+        {ROADMAP.map(({ icon: Icon, title, body, tag }) => (
+          <article key={title} className={`soon-card ${tag ? 'is-featured' : ''}`}>
+            <div className="soon-card-top">
+              <span className="soon-icon"><Icon size={18} /></span>
+              {tag && <span className="soon-tag">{tag}</span>}
+            </div>
+            <h2>{title}</h2>
+            <p>{body}</p>
+          </article>
+        ))}
       </section>
 
-      {error && (
-        <section className="sim-state-card is-error">
-          ⚠️ {error}
-        </section>
-      )}
-      {loading && !error && (
-        <section className="sim-state-card">
-          <RefreshCw size={14} className="spin" /> Loading all scenarios...
-        </section>
-      )}
-
-      {!loading && !error && scenarioData && (
-        <>
-          <section className="benchmark-table-card">
-            <div className="map-card-header">
-              <span className="section-kicker">14-Day Averages — {selectedCity}</span>
-              <h2 className="card-title">Scenario Summary</h2>
-            </div>
-            <div className="benchmark-table-wrap">
-              <table className="benchmark-table">
-                <thead>
-                  <tr>
-                    <th>Scenario</th>
-                    <th>Window</th>
-                    <th>Avg {VARIABLE_LABELS[activeVariable]}</th>
-                    <th>15-Yr Normal</th>
-                    <th>Anomaly</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summaryRows.map((row) => (
-                    <tr key={row.id}>
-                      <td><strong style={{ color: row.color }}>●</strong> {row.label}</td>
-                      <td className="card-meta">{row.startDate} → {row.endDate}</td>
-                      <td>{row.predAvg?.toFixed(2) ?? '—'}</td>
-                      <td>{row.climAvg?.toFixed(2) ?? '—'}</td>
-                      <td className={row.delta > 0 ? 'val-poor' : row.delta < 0 ? 'val-good' : undefined}>
-                        {row.delta !== null ? (row.delta >= 0 ? `+${row.delta.toFixed(2)}` : row.delta.toFixed(2)) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <div className="chart-card">
-            <span className="section-kicker">14-Day Trajectories</span>
-            <h2 className="card-title">All Scenarios — {selectedCity}</h2>
-            <div className="chart-area" style={{ minHeight: 360 }}>
-              {combinedChartData && <Line data={combinedChartData} options={chartOptions} />}
-            </div>
-          </div>
-        </>
-      )}
+      <section className="soon-shipped">
+        <span className="section-kicker">Already live in Phase 1</span>
+        <ul>
+          {SHIPPED.map((s) => (
+            <li key={s.label}>
+              <Link to={s.to}>
+                <CheckCircle2 size={15} /> {s.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   )
 }

@@ -19,7 +19,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 import config
 from data_pipeline.preprocessor import prepare_full_pipeline, inverse_transform
 from data_pipeline.sequence_builder import create_sliding_sequences, split_chronologically
-from models.convlstm_model import WeightedClimateLoss, TemporalRepeat, BroadcastCalendar, LastTimestep, ClipToUnitRange
+from models.convlstm_model import load_trained_model
 from models.baselines import PersistenceBaseline, ClimatologyBaseline, LinearTrendBaseline
 from evaluation.metrics import compute_comprehensive_metrics
 from evaluation.visualizations import (
@@ -59,14 +59,7 @@ def main():
         return
 
     print(f"Loading trained ConvLSTM model from: {config.MODEL_SAVE_PATH}...")
-    custom_objects = {
-        "WeightedClimateLoss": WeightedClimateLoss,
-        "TemporalRepeat": TemporalRepeat,
-        "BroadcastCalendar": BroadcastCalendar,
-        "LastTimestep": LastTimestep,
-        "ClipToUnitRange": ClipToUnitRange
-    }
-    model = tf.keras.models.load_model(config.MODEL_SAVE_PATH, custom_objects=custom_objects)
+    model = load_trained_model(config.MODEL_SAVE_PATH, land_mask=land_mask)
 
     # 4. Run Model Predictions
     print("Running ConvLSTM2D inference...")

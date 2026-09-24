@@ -1,4 +1,4 @@
-import { LayoutDashboard, Activity, BarChart3, Settings2 } from 'lucide-react'
+import { LayoutDashboard, Activity, BarChart3, SlidersHorizontal } from 'lucide-react'
 
 /* Route table for the top navigation.
    Kept out of TopBar.jsx deliberately: React Fast Refresh only preserves a
@@ -10,5 +10,6 @@ export const NAV = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/model-test', label: 'Model', icon: Activity },
   { to: '/comparisons', label: 'Comparisons', icon: BarChart3 },
-  { to: '/scenarios', label: 'Scenarios', icon: Settings2 },
+  // Phase 2. The page is a roadmap, and the nav says so before you click.
+  { to: '/scenarios', label: 'What-If', icon: SlidersHorizontal, soon: true },
 ]

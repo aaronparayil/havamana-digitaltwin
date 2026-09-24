@@ -455,19 +455,20 @@
 }
 
 /* City pins drawn over the raster. */
+/* Sizes are in raster grid units (the SVG viewBox is 32x32), not pixels. */
 .city-pin {
-  fill: var(--ink);
+  fill: var(--accent-warm);
   stroke: var(--surface-sunk);
-  stroke-width: 1.5;
+  stroke-width: 0.18;
   pointer-events: none;
 }
 
 .city-pin-label {
   fill: var(--ink);
-  font: 500 8px var(--font-sans);
+  font: 600 0.9px var(--font-sans);
   paint-order: stroke;
-  stroke: var(--surface-sunk);
-  stroke-width: 2.5px;
+  stroke: rgba(5, 10, 16, 0.85);
+  stroke-width: 0.32px;
   stroke-linejoin: round;
   pointer-events: none;
 }
@@ -950,4 +951,230 @@
    flat SVG raster would just crop the scene. */
 .map-canvas-container:has(.terrain3d-wrap) {
   padding: 0;
+}
+
+
+/* The gradient fills the scale so its bins line up with the tick labels. */
+.legend-scale .legend-gradient {
+  max-width: none;
+  width: 100%;
+}
+
+/* Cards that hold a chart directly rather than through a header row. */
+.chart-card {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+/* =================================================== featured replays */
+
+.replay-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.replay-card {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-4);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.replay-card:hover {
+  border-color: var(--accent);
+}
+
+.replay-card.active {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.replay-card strong {
+  color: var(--ink);
+  font: 600 15px/1.3 var(--font-sans);
+}
+
+.replay-date {
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.replay-blurb {
+  font: 400 12.5px/1.5 var(--font-sans);
+}
+
+/* ======================================================= window skill */
+
+.skill-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) repeat(3, minmax(180px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.skill-intro p {
+  margin: 6px 0 0;
+  font: 400 12.5px/1.55 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.skill-tile .stat-label {
+  display: block;
+  font: var(--text-label);
+  letter-spacing: var(--label-spacing);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.skill-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.skill-main strong {
+  font: 600 22px/1.1 var(--font-sans);
+  color: var(--ink);
+}
+
+.skill-main span,
+.skill-sub {
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.skill-sub em {
+  font-style: normal;
+  font-weight: 600;
+}
+
+.skill-sub em.is-good { color: var(--status-good); }
+.skill-sub em.is-poor { color: var(--status-warning); }
+
+@media (max-width: 900px) {
+  .skill-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ================================================= comparisons page */
+
+.takeaway-card {
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.takeaway-card p {
+  margin: 6px 0 0;
+  max-width: 980px;
+  font: 400 13.5px/1.65 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.takeaway-card strong {
+  color: var(--ink);
+}
+
+.model-tag {
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--accent-ring);
+  color: var(--accent);
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+/* Phone widths: let control groups wrap instead of pushing the page sideways,
+   and label every other lead day so fourteen ticks fit. */
+@media (max-width: 760px) {
+  .sim-wrap {
+    overflow-x: clip;
+  }
+
+  .pill-group {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .sim-controls-bar,
+  .control-group {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .timeline-ticks span:nth-child(even) {
+    visibility: hidden;
+  }
+
+  .sim-title {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Clickable city markers on the 2D raster (grid units, not pixels). */
+.city-marker {
+  cursor: pointer;
+}
+
+.city-hit {
+  fill: transparent;
+}
+
+.city-marker:hover .city-pin,
+.city-marker.is-selected .city-pin {
+  fill: var(--ink);
+  stroke: var(--accent-warm);
+  stroke-width: 0.22;
+}
+
+.city-marker.is-selected .city-pin-label {
+  fill: var(--accent-warm);
+}
+
+.keyboard-hint {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+.keyboard-hint kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--ink-secondary);
+  font: inherit;
+}
+
+.timeline-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+@media (hover: none) {
+  .keyboard-hint { display: none; }
 }

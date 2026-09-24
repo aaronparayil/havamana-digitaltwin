@@ -35,7 +35,7 @@ const AIR_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality'
 
    Call budget: Open-Meteo counts EVERY location in a multi-point request as a
    separate API call, and the free tier caps requests per hour. The lattices
-   below cost 198 (global) + 56 (India) + 16 (cities) = 270 calls per refresh,
+   below cost 198 (global) + 56 (India) + 40 (20 cities x 2 APIs) = 294 calls per refresh,
    and results are cached (see CACHE_TTL_MS) so reloading the page during a
    demo does not refetch. An earlier, denser version cost 592 calls per load
    and reliably tripped the hourly limit after a couple of reloads. */
@@ -59,15 +59,29 @@ export const gridLons = Array.from({ length: GRID_NX }, (_, i) =>
   +(GRID_BOUNDS.lonMin + (i * (GRID_BOUNDS.lonMax - GRID_BOUNDS.lonMin)) / (GRID_NX - 1)).toFixed(3)
 )
 
+// One or two per region so hovering the globe finds a city almost anywhere
+// in India. Karnataka's four are the model's own pilot cities.
 export const CITIES = [
-  { name: 'Delhi', lat: 28.61, lon: 77.21 },
-  { name: 'Mumbai', lat: 19.08, lon: 72.88 },
-  { name: 'Kolkata', lat: 22.57, lon: 88.36 },
-  { name: 'Chennai', lat: 13.08, lon: 80.27 },
-  { name: 'Bengaluru', lat: 12.97, lon: 77.59 },
-  { name: 'Hyderabad', lat: 17.39, lon: 78.49 },
-  { name: 'Ahmedabad', lat: 23.02, lon: 72.57 },
-  { name: 'Lucknow', lat: 26.85, lon: 80.95 },
+  { name: 'Delhi', state: 'Delhi', lat: 28.61, lon: 77.21 },
+  { name: 'Mumbai', state: 'Maharashtra', lat: 19.08, lon: 72.88 },
+  { name: 'Kolkata', state: 'West Bengal', lat: 22.57, lon: 88.36 },
+  { name: 'Chennai', state: 'Tamil Nadu', lat: 13.08, lon: 80.27 },
+  { name: 'Bengaluru', state: 'Karnataka', lat: 12.97, lon: 77.59 },
+  { name: 'Hyderabad', state: 'Telangana', lat: 17.39, lon: 78.49 },
+  { name: 'Ahmedabad', state: 'Gujarat', lat: 23.02, lon: 72.57 },
+  { name: 'Lucknow', state: 'Uttar Pradesh', lat: 26.85, lon: 80.95 },
+  { name: 'Jaipur', state: 'Rajasthan', lat: 26.91, lon: 75.79 },
+  { name: 'Pune', state: 'Maharashtra', lat: 18.52, lon: 73.86 },
+  { name: 'Bhopal', state: 'Madhya Pradesh', lat: 23.26, lon: 77.41 },
+  { name: 'Patna', state: 'Bihar', lat: 25.59, lon: 85.14 },
+  { name: 'Guwahati', state: 'Assam', lat: 26.14, lon: 91.74 },
+  { name: 'Srinagar', state: 'Jammu & Kashmir', lat: 34.08, lon: 74.80 },
+  { name: 'Chandigarh', state: 'Chandigarh', lat: 30.73, lon: 76.78 },
+  { name: 'Bhubaneswar', state: 'Odisha', lat: 20.30, lon: 85.82 },
+  { name: 'Kochi', state: 'Kerala', lat: 9.93, lon: 76.27 },
+  { name: 'Mangaluru', state: 'Karnataka', lat: 12.91, lon: 74.85 },
+  { name: 'Mysuru', state: 'Karnataka', lat: 12.30, lon: 76.65 },
+  { name: 'Kalaburagi', state: 'Karnataka', lat: 17.33, lon: 76.83 },
 ]
 
 /**
@@ -119,7 +133,7 @@ function buildCityUrl(base, current) {
    responses are kept in localStorage with a TTL; a reload inside the window
    rehydrates instantly and makes zero network requests. Typed arrays are
    rebuilt from the cached JSON on read, so nothing binary goes to storage. */
-const CACHE_KEY = 'havamana.live.v1'
+const CACHE_KEY = 'havamana.live.v2'
 const CACHE_TTL_MS = 30 * 60 * 1000
 
 function readCache() {

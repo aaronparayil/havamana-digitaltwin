@@ -669,3 +669,27 @@ capped so the
 .map-canvas-container {
   background: var(--surface-sunk);
 }
+
+.city-state {
+  margin-left: 8px;
+  font: 400 10px/1 var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-muted);
+}
+
+.table-more {
+  display: block;
+  width: 100%;
+  padding: var(--space-3);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--accent);
+  font: 500 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.table-more:hover {
+  background: var(--surface-2);
+}

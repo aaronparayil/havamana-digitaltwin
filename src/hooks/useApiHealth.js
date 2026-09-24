@@ -18,24 +18,26 @@ export function useApiHealth(intervalMs = 30000) {
     let cancelled = false
     let timer
 
+    /* While the API is down (it takes ~20 s to boot) check every few seconds,
+       so the status pill turns green promptly; once it is up, back off. */
     const check = async () => {
+      let next = 'offline'
       try {
         const res = await fetch(`${API_BASE}/api/health`)
         if (!res.ok) throw new Error('unhealthy')
         const data = await res.json()
-        if (!cancelled) {
-          setHealth({ state: 'online', modelLoaded: Boolean(data.model_loaded) })
-        }
+        next = 'online'
+        if (!cancelled) setHealth({ state: 'online', modelLoaded: Boolean(data.model_loaded) })
       } catch {
         if (!cancelled) setHealth({ state: 'offline', modelLoaded: false })
       }
+      if (!cancelled) timer = setTimeout(check, next === 'online' ? intervalMs : 4000)
     }
 
     check()
-    timer = setInterval(check, intervalMs)
     return () => {
       cancelled = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
   }, [intervalMs])
 

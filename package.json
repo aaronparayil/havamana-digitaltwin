@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/dev.js",
     "dev:frontend": "vite",
-    "dev:backend": "py -m backend.api.app",
+    "dev:backend": "python -m backend.api.app",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"

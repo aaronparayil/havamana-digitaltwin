@@ -19,7 +19,7 @@ const DESTINATIONS = [
     id: 'model',
     title: 'Karnataka forecast — ConvLSTM2D',
     category: 'Model Simulation',
-    keywords: 'forecast convlstm model rainfall tmax tmin grid terrain 3d lead day karnataka',
+    keywords: 'forecast convlstm model rainfall tmax tmin grid terrain 3d lead day karnataka replay verify heatwave monsoon',
     to: '/model-test',
   },
   {
@@ -31,9 +31,9 @@ const DESTINATIONS = [
   },
   {
     id: 'scenarios',
-    title: 'Scenario explorer',
-    category: 'Scenarios',
-    keywords: 'scenario monsoon heatwave post-monsoon winter lookahead',
+    title: 'What-If simulator (coming soon)',
+    category: 'Roadmap',
+    keywords: 'what-if scenario simulator phase 2 roadmap insat alerts coming soon',
     to: '/scenarios',
   },
 ]
