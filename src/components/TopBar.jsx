@@ -33,7 +33,7 @@ export function TopBar({ status }) {
 
   return (
     <header className="topbar">
-      <NavLink className="brand" to="/" end>
+      <NavLink className="brand" to="/" end viewTransition>
         <span className="brand-dot">◎</span>
         <span className="brand-text">
           <strong>HavaMana</strong>
@@ -47,6 +47,7 @@ export function TopBar({ status }) {
             key={to}
             to={to}
             end={end}
+            viewTransition
             className={({ isActive }) => `topnav-link ${isActive ? 'active' : ''}`}
             onClick={() => setMenuOpen(false)}
           >

@@ -70,7 +70,7 @@ export function SearchModal({ isOpen, onClose }) {
     : DESTINATIONS
 
   const go = (to) => {
-    navigate(to)
+    navigate(to, { viewTransition: true })
     onClose()
   }
 

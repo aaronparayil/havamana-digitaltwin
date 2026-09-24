@@ -207,7 +207,7 @@ export function Dashboard() {
               cities={cities}
               layer={layer}
               observedAt={observedAt}
-              onDrillToModel={() => navigate('/model-test')}
+              onDrillToModel={() => navigate('/model-test', { viewTransition: true })}
             />
           </Suspense>
         </div>

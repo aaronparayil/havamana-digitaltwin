@@ -56,10 +56,10 @@ export function Scenarios() {
           compare the outcome against the forecast.
         </p>
         <div className="soon-actions">
-          <Link to="/model-test" className="soon-cta">
+          <Link to="/model-test" className="soon-cta" viewTransition>
             Try the live forecast <ArrowRight size={15} />
           </Link>
-          <Link to="/comparisons" className="soon-link">See model accuracy</Link>
+          <Link to="/comparisons" className="soon-link" viewTransition>See model accuracy</Link>
         </div>
       </section>
 
@@ -81,7 +81,7 @@ export function Scenarios() {
         <ul>
           {SHIPPED.map((s) => (
             <li key={s.label}>
-              <Link to={s.to}>
+              <Link to={s.to} viewTransition>
                 <CheckCircle2 size={15} /> {s.label}
               </Link>
             </li>

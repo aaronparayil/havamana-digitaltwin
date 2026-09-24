@@ -1,0 +1,141 @@
+/* ==========================================================================
+   Motion
+   --------------------------------------------------------------------------
+   Page changes use the View Transitions API (React Router's `viewTransition`
+   on every Link/NavLink/navigate). Three named layers:
+
+     root        the page body: old fades out, new fades in
+     topbar      the app chrome: held still, so only content moves
+     nav-active  the highlighted nav pill: glides to the new tab
+
+   Inside the incoming page, top-level sections rise in with a short stagger.
+   Sections that mount later (a replay's results, a loaded chart) get the
+   same entrance, so content never pops in.
+
+   Browsers without View Transitions (no `.has-vt` on <html>) get a plain
+   fade on the page instead. prefers-reduced-motion switches all of it off.
+   ========================================================================== */
+
+:root {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ------------------------------------------------------ view transitions */
+
+.topbar {
+  view-transition-name: topbar;
+}
+
+.topnav-link.active {
+  view-transition-name: nav-active;
+}
+
+::view-transition-old(root) {
+  animation: vt-fade-out 140ms ease-in both;
+}
+
+::view-transition-new(root) {
+  animation: vt-fade-in 260ms var(--ease-out-soft) both;
+}
+
+/* The chrome does not cross-fade with itself. */
+::view-transition-old(topbar),
+::view-transition-new(topbar) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-group(nav-active) {
+  animation-duration: 340ms;
+  animation-timing-function: var(--ease-out-soft);
+}
+
+@keyframes vt-fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes vt-fade-in {
+  from { opacity: 0; }
+}
+
+/* ------------------------------------------------------ section entrance */
+
+.content-wrap > *,
+.sim-wrap > * {
+  /* backwards, not both: a finished animation left applied would make every
+     section its own stacking context, and the date-picker popover would
+     slide under the next section. */
+  animation: section-rise 460ms var(--ease-out-soft) backwards;
+}
+
+.content-wrap > :nth-child(2), .sim-wrap > :nth-child(2) { animation-delay: 40ms; }
+.content-wrap > :nth-child(3), .sim-wrap > :nth-child(3) { animation-delay: 80ms; }
+.content-wrap > :nth-child(4), .sim-wrap > :nth-child(4) { animation-delay: 120ms; }
+.content-wrap > :nth-child(5), .sim-wrap > :nth-child(5) { animation-delay: 160ms; }
+.content-wrap > :nth-child(6), .sim-wrap > :nth-child(6) { animation-delay: 200ms; }
+.content-wrap > :nth-child(n + 7), .sim-wrap > :nth-child(n + 7) { animation-delay: 240ms; }
+
+@keyframes section-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Without View Transitions, fade the whole page in on route change. */
+html:not(.has-vt) .main-content > * {
+  animation: vt-fade-in 240ms var(--ease-out-soft) backwards;
+}
+
+/* ------------------------------------------------------- small touches */
+
+.map-loading,
+.globe-tooltip {
+  animation: vt-fade-in 160ms ease-out both;
+}
+
+.replay-card {
+  transition: border-color var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease),
+              transform 180ms var(--ease-out-soft);
+}
+
+.replay-card:hover {
+  transform: translateY(-2px);
+}
+
+.soon-card {
+  transition: transform 200ms var(--ease-out-soft), border-color 200ms var(--ease-out-soft);
+}
+
+.soon-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--line-strong);
+}
+
+.soon-card.is-featured:hover {
+  border-color: var(--accent);
+}
+
+/* ------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  .content-wrap > *,
+  .sim-wrap > *,
+  html:not(.has-vt) .main-content > *,
+  .map-loading,
+  .globe-tooltip {
+    animation: none;
+  }
+
+  .replay-card:hover,
+  .soon-card:hover {
+    transform: none;
+  }
+}

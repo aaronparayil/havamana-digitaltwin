@@ -44,16 +44,22 @@ const TABLE_COLUMNS = [
   ['tmin', 'MAE', ' °C'], ['tmin', 'R2', ''],
 ]
 
+/* The benchmark never changes while the app is open, so a successful load is
+   kept for the session. Returning to this page then renders instantly, with
+   no loading flash in the middle of a page transition. */
+let sessionCache = null
+
 export function Comparisons() {
-  const [rawMetrics, setRawMetrics] = useState(null)
-  const [cityForecast, setCityForecast] = useState(null)
+  const [rawMetrics, setRawMetrics] = useState(sessionCache?.metrics ?? null)
+  const [cityForecast, setCityForecast] = useState(sessionCache?.city ?? null)
   const [activeVariable, setActiveVariable] = useState('rainfall')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!sessionCache)
   const [error, setError] = useState(null)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    if (sessionCache && attempt === 0) return undefined
     async function load() {
       setLoading(true)
       setError(null)
@@ -68,6 +74,7 @@ export function Comparisons() {
         if (!metricsRes.ok || !cityRes.ok) throw new Error('Request failed')
         const metrics = await metricsRes.json()
         const city = await cityRes.json()
+        sessionCache = { metrics, city }
         if (!cancelled) {
           setRawMetrics(metrics)
           setCityForecast(city)
