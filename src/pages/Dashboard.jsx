@@ -129,7 +129,9 @@ export function Dashboard() {
       )}
 
       {/* ------------------------------------------------------- stat tiles */}
-      <section className="metrics-grid globe-stats">
+      {/* Shimmer instead of "—" while the first reading is in flight, so an
+          empty tile never reads as missing data. */}
+      <section className={`metrics-grid globe-stats ${isLoading && !hasData ? 'is-loading' : ''}`} aria-busy={isLoading && !hasData}>
         <div className="metric-card">
           <div className="metric-icon"><Thermometer size={18} /></div>
           <div className="metric-copy">
@@ -198,7 +200,7 @@ export function Dashboard() {
         </div>
 
         <div className="globe-stage">
-          <Suspense fallback={<div className="globe-loading">Loading globe…</div>}>
+          <Suspense fallback={<div className="globe-loading"><RefreshCw size={14} className="spin" />Loading 3D globe…</div>}>
             <Globe3D
               grid={grid}
               globalGrid={globalGrid}

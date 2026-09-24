@@ -693,3 +693,50 @@ capped so the
 .table-more:hover {
   background: var(--surface-2);
 }
+
+/* Stat-tile placeholders while the live feed loads. */
+.globe-stats.is-loading .metric-copy strong,
+.globe-stats.is-loading .metric-copy small {
+  color: transparent;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: tile-shimmer 1.2s ease-in-out infinite;
+}
+
+.globe-stats.is-loading .metric-copy strong {
+  width: 110px;
+}
+
+.globe-stats.is-loading .metric-copy small {
+  display: inline-block;
+  width: 140px;
+  margin-top: 4px;
+}
+
+/* Values only; the tile labels stay readable. !important beats the inline
+   AQI band colour on the air-quality value. */
+.globe-stats.is-loading .metric-copy strong,
+.globe-stats.is-loading .metric-copy small,
+.globe-stats.is-loading .metric-copy strong *,
+.globe-stats.is-loading .metric-copy small * {
+  color: transparent !important;
+}
+
+@keyframes tile-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .globe-stats.is-loading .metric-copy strong,
+  .globe-stats.is-loading .metric-copy small {
+    animation: none;
+  }
+}
+
+.globe-loading svg {
+  color: var(--accent);
+  margin-right: 8px;
+  vertical-align: -3px;
+}

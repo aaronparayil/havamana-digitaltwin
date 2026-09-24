@@ -306,7 +306,7 @@ export function ModelSimulation() {
   const [dateViewMode, setDateViewMode] = useState('forecast') // 'forecast' | 'actual' | 'error'
 
   // API State
-  const [apiConnected, setApiConnected] = useState(false)
+  const [apiConnected, setApiConnected] = useState(null) // null = first request in flight
   const [loading, setLoading] = useState(false)
   const [forecastData, setForecastData] = useState(null)
   const [benchmarkMetrics, setBenchmarkMetrics] = useState(null)
@@ -545,12 +545,12 @@ export function ModelSimulation() {
     })
   }
 
-  /* The API takes ~20 s to load TensorFlow and the dataset. Opening this page
+  /* The API takes ~5 s (longer on a cold machine) to load TensorFlow and the dataset. Opening this page
      before it is ready used to leave demo data on screen until someone
      clicked Re-compute. Now it quietly retries and swaps in the real model
      output the moment the API answers. */
   useEffect(() => {
-    if (apiConnected) return undefined
+    if (apiConnected !== false) return undefined
     const t = setInterval(() => {
       if (explorerMode === 'future') fetchFutureForecast(selectedScenario)
       else if (dateError) fetchDateForecast(selectedDate)
@@ -749,7 +749,12 @@ export function ModelSimulation() {
             <span className="sim-badge">
               Resolution: ~22 km Grid
             </span>
-            {apiConnected ? (
+            {apiConnected === null ? (
+              <span className="sim-badge">
+                <RefreshCw size={12} className="spin" style={{ verticalAlign: '-2px', marginRight: 4 }} />
+                Connecting to model…
+              </span>
+            ) : apiConnected ? (
               <span className="sim-badge is-live">
                 <CheckCircle2 size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
                 Neural API Live
@@ -778,14 +783,14 @@ export function ModelSimulation() {
       {/* When the API is unreachable the page falls back to a synthetic
           generator. Saying so plainly is the point: the charts below are
           indistinguishable from real model output at a glance. */}
-      {!apiConnected && (
+      {apiConnected === false && (
         <div className="demo-banner">
           <AlertCircle size={16} />
           <div>
             <strong>Showing demo data, not model output.</strong>{' '}
             The forecasting API at <code>{API_BASE}</code> is unreachable, so every
             value on this page is generated locally for layout purposes. Start the backend
-            to see real ConvLSTM2D forecasts.
+            to see real ConvLSTM2D forecasts. <em>Retrying every 5 seconds…</em>
           </div>
         </div>
       )}
@@ -826,7 +831,10 @@ export function ModelSimulation() {
               fetchDateForecast(r.date)
             }}
           >
-            <span className="replay-date">{formatPrettyDate(r.date)} · unseen test data</span>
+            <span className="replay-date">
+              {formatPrettyDate(r.date)} · unseen test data
+              {dateLoading && selectedDate === r.date && <RefreshCw size={11} className="spin replay-spin" />}
+            </span>
             <strong>{r.title}</strong>
             <span className="replay-blurb">{r.blurb}</span>
           </button>
@@ -887,6 +895,12 @@ export function ModelSimulation() {
       {dateError && (
         <section className="sim-state-card is-error">
           ⚠️ {dateError}
+        </section>
+      )}
+
+      {!dateForecast && dateLoading && (
+        <section className="sim-state-card">
+          <RefreshCw size={14} className="spin" /> Running the model on the 30 days before {formatPrettyDate(selectedDate)}…
         </section>
       )}
 
@@ -988,6 +1002,11 @@ export function ModelSimulation() {
               </div>
 
               <div className="map-canvas-container">
+                {dateLoading && (
+                  <div className="map-loading is-refresh">
+                    <RefreshCw size={16} className="spin" /> Running the model…
+                  </div>
+                )}
                 {renderMode === '3d' && dateActiveGrid && (
                   <Suspense fallback={<div className="terrain3d-loading">Loading 3D terrain…</div>}>
                     <ForecastTerrain3D
@@ -1161,9 +1180,11 @@ export function ModelSimulation() {
               <strong className="scrub-readout">
                 Forecast Horizon: Day +{leadDay} of 14
               </strong>
-              <span className="scrub-date">
-                ({currentDayData?.date})
-              </span>
+              {currentDayData?.date && (
+                <span className="scrub-date">
+                  ({currentDayData.date})
+                </span>
+              )}
             </div>
           </div>
           <div className="timeline-meta">
@@ -1229,6 +1250,11 @@ export function ModelSimulation() {
           </div>
 
           <div className="map-canvas-container">
+            {(loading || !forecastData) && (
+              <div className={`map-loading ${forecastData ? 'is-refresh' : ''}`}>
+                <RefreshCw size={16} className="spin" /> Running ConvLSTM2D forecast…
+              </div>
+            )}
             {renderMode === '3d' ? (
               <Suspense fallback={<div className="terrain3d-loading">Loading 3D terrain…</div>}>
                 <ForecastTerrain3D

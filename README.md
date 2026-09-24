@@ -65,8 +65,9 @@ Presenter tips:
 - On the Model page, **Space** plays or pauses the 14 days, and **← / →** step one day.
 - Click a city dot on the Karnataka map to chart it. Hover any cell for forecast, recorded and error values.
 - Hover a city on the globe for its live readings.
-- If you open a page before the API has finished loading (~20 s), it retries by itself.
-  There is no need to refresh.
+- The API needs about 5 s to start (longer on the first run after a reboot). Pages opened
+  before it is ready show a loader and retry by themselves every few seconds, so there is
+  no need to refresh.
 
 ## Known limitations (stated in the app too)
 

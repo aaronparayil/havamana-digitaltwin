@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 
-export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5005'
+/* 127.0.0.1, not "localhost": on Windows, localhost resolves to IPv6 first,
+   Flask listens on IPv4 only, and every request waited ~200 ms for the
+   fallback before connecting. Measured: /api/health 225 ms -> 25 ms. */
+export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:5005'
 
 /**
  * Polls the forecasting API so the shell can tell the truth about whether a
@@ -18,7 +21,7 @@ export function useApiHealth(intervalMs = 30000) {
     let cancelled = false
     let timer
 
-    /* While the API is down (it takes ~20 s to boot) check every few seconds,
+    /* While the API is down (it takes ~5 s to boot, more on a cold machine) check every few seconds,
        so the status pill turns green promptly; once it is up, back off. */
     const check = async () => {
       let next = 'offline'

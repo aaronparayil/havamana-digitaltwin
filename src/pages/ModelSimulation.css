@@ -1178,3 +1178,33 @@
 @media (hover: none) {
   .keyboard-hint { display: none; }
 }
+
+/* Loading veil over a map. Solid on first load (nothing to show yet),
+   translucent on refresh so the previous forecast stays visible under it. */
+.map-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--surface-sunk);
+  color: var(--ink-secondary);
+  font: 500 13px/1 var(--font-sans);
+  pointer-events: none;
+}
+
+.map-loading.is-refresh {
+  background: rgba(3, 5, 10, 0.55);
+  backdrop-filter: blur(1.5px);
+}
+
+.map-loading svg {
+  color: var(--accent);
+}
+
+.replay-spin {
+  margin-left: 6px;
+  vertical-align: -1px;
+}
