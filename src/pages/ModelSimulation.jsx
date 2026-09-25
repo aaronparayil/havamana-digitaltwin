@@ -13,6 +13,8 @@ import { DatePicker } from '../components/DatePicker'
 import { cellColor, legendGradient, legendBounds, legendTicks, seriesFor } from '../styles/dataColors'
 import { chartOptions, lineSeries } from '../styles/chartTheme'
 import { API_BASE } from '../hooks/useApiHealth'
+import { ModelExplainer } from '../components/ModelExplainer'
+import { InfoTip } from '../components/InfoTip'
 
 // Loaded only when the 3D tab is opened — keeps three.js out of the main bundle.
 const ForecastTerrain3D = lazy(() =>
@@ -795,10 +797,19 @@ export function ModelSimulation() {
         </div>
       )}
 
+      <ModelExplainer />
+
       {/* Explorer Mode Tabs: Forward Scenarios vs. a Specific Calendar Date */}
       <section className="sim-controls-bar" style={{ marginBottom: 4 }}>
         <div className="control-group">
-          <span className="control-label">Explore:</span>
+          <span className="control-label">
+            Explore:
+            <InfoTip>
+              <strong>Forecast ahead</strong> shows the model&rsquo;s outlook for upcoming days.{' '}
+              <strong>Replay &amp; verify</strong> runs it on a past date and shows what really
+              happened, so you can judge how good it is.
+            </InfoTip>
+          </span>
           <div className="pill-group">
             <button
               className={`pill-btn ${explorerMode === 'future' ? 'active' : ''}`}
@@ -873,7 +884,14 @@ export function ModelSimulation() {
         </div>
 
         <div className="control-group">
-          <span className="control-label">Layer:</span>
+          <span className="control-label">
+            Layer:
+            <InfoTip>
+              <strong>Model forecast</strong>: what the model predicted.{' '}
+              <strong>Actual recorded</strong>: what IMD measured on that day.{' '}
+              <strong>Forecast error</strong>: the gap between the two. Darker means closer.
+            </InfoTip>
+          </span>
           <div className="pill-group">
             <button className={`pill-btn ${dateViewMode === 'forecast' ? 'active' : ''}`} onClick={() => setDateViewMode('forecast')}>
               Model Forecast
@@ -961,7 +979,15 @@ export function ModelSimulation() {
           {dateForecast.window_skill && (
             <section className="skill-strip">
               <div className="skill-intro">
-                <span className="section-kicker">How the model did in this window</span>
+                <span className="section-kicker">
+                  How the model did in this window
+                  <InfoTip>
+                    <strong>Model error</strong> is how far off the forecast was, on average, across
+                    Karnataka. It is compared with <strong>climatology</strong>, the 15-year average for
+                    those dates: a forecast is only useful if it beats that. <strong>Pattern match r</strong>{' '}
+                    shows whether the highs and lows are in the right places (1.0 is perfect).
+                  </InfoTip>
+                </span>
                 <p>
                   Forecast made from the 30 days before {formatPrettyDate(dateForecast.forecast_start_date)} only,
                   then scored against what IMD actually recorded, averaged over all 432 land cells.
@@ -1086,7 +1112,14 @@ export function ModelSimulation() {
       <section className="sim-controls-bar">
         {/* Scenarios */}
         <div className="control-group">
-          <span className="control-label">Outlook window:</span>
+          <span className="control-label">
+            Outlook window:
+            <InfoTip>
+              Which 14 days to forecast. <strong>Next 14 days</strong> starts tomorrow. The others
+              jump to the next monsoon peak, pre-monsoon heat or post-monsoon rains, to show how the
+              model behaves in each season.
+            </InfoTip>
+          </span>
           {SCENARIOS.map((s) => (
             <button
               key={s.id}
@@ -1134,7 +1167,15 @@ export function ModelSimulation() {
 
         {/* View Mode */}
         <div className="control-group">
-          <span className="control-label">Layer:</span>
+          <span className="control-label">
+            Layer:
+            <InfoTip>
+              <strong>Future forecast</strong>: what the model predicts.{' '}
+              <strong>15-yr normal</strong>: the average for these dates, 2010–2025.{' '}
+              <strong>State anomaly</strong>: forecast minus normal. Warm colours mean hotter or wetter
+              than usual, cool colours cooler or drier.
+            </InfoTip>
+          </span>
           <div className="pill-group">
             <button
               className={`pill-btn ${viewMode === 'forecast' ? 'active' : ''}`}
@@ -1441,7 +1482,16 @@ export function ModelSimulation() {
       <section className="benchmark-table-card">
         <div className="map-card-header">
           <div>
-            <span className="section-kicker">Empirical Verification (2023–2025 Test Split)</span>
+            <span className="section-kicker">
+              Empirical Verification (2023–2025 Test Split)
+              <InfoTip>
+                Scored on 1,083 forecasts from 2023–2025, years the model never saw while training.{' '}
+                <strong>MAE</strong>: average error. <strong>RMSE</strong>: like MAE but punishes big
+                misses more. <strong>R²</strong>: how much of the day-to-day variation it captures (1 is
+                perfect, 0 is no better than a flat average). <strong>best</strong> marks the winner in
+                each column.
+              </InfoTip>
+            </span>
             <h2 className="card-title">Karnataka Pilot Benchmark Accuracy Comparison</h2>
           </div>
           <span className="card-meta">

@@ -1,0 +1,353 @@
+/* First-visit explainer on the Model page. Tokens only. */
+
+.explainer {
+  margin-bottom: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(90% 120% at 100% 0%, var(--accent-sunk) 0%, transparent 60%),
+    var(--surface-1);
+}
+
+.explainer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.explainer-head .section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.explainer-head h2 {
+  margin: 6px 0 0;
+  font: 700 24px/1.2 var(--font-sans);
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.explainer-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+
+.explainer-close:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+/* -------------------------------------------------------------- steps */
+
+.explainer-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  margin: var(--space-5) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.explainer-step {
+  position: relative;
+}
+
+.explainer-visual {
+  display: flex;
+  align-items: center;
+  height: 64px;
+  margin-bottom: var(--space-3);
+}
+
+.explainer-step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.explainer-step-title strong {
+  color: var(--ink);
+  font: 600 15px/1.3 var(--font-sans);
+}
+
+.explainer-num {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--ink-inverse);
+  font: 700 11px/1 var(--font-sans);
+}
+
+.explainer-step p {
+  margin: 8px 0 0;
+  font: 400 13px/1.6 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.explainer-step strong,
+.explainer-step em {
+  color: var(--ink);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.explainer-arrow {
+  position: absolute;
+  top: 22px;
+  right: calc(-1 * var(--space-6) + 3px);
+  color: var(--line-strong);
+}
+
+/* Stacked daily-map tiles for steps 1 and 3. */
+.frame-stack {
+  position: relative;
+  width: 88px;
+  height: 56px;
+}
+
+.frame-stack span {
+  position: absolute;
+  left: calc(var(--i) * 9px);
+  top: calc(var(--i) * -5px + 16px);
+  width: 40px;
+  height: 36px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.frame-stack.tone-in span { background-color: #184f95; }
+.frame-stack.tone-in span:nth-child(odd) { background-color: #256abf; }
+.frame-stack.tone-out span { background-color: #a8441d; }
+.frame-stack.tone-out span:nth-child(odd) { background-color: #d95926; }
+
+.frame-stack em {
+  position: absolute;
+  left: 76px;
+  top: 20px;
+  font: 600 11px/1 var(--font-mono);
+  font-style: normal;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.net-glyph {
+  width: 88px;
+  height: 56px;
+}
+
+.net-glyph line {
+  stroke: var(--line-strong);
+  stroke-width: 0.8;
+}
+
+.net-glyph circle {
+  fill: var(--accent);
+}
+
+.net-glyph circle.mid {
+  fill: var(--accent-warm);
+}
+
+/* --------------------------------------------------------------- cards */
+
+.explainer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  gap: var(--space-4);
+}
+
+.explainer-card {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunk);
+}
+
+.explainer-card h3 {
+  margin: 0 0 var(--space-3);
+  font: 600 14px/1.3 var(--font-sans);
+  color: var(--ink);
+}
+
+.explainer-card dl,
+.explainer-card ul {
+  margin: 0;
+  padding: 0;
+}
+
+.explainer-card dt {
+  font: 600 13px/1.4 var(--font-sans);
+  color: var(--ink);
+}
+
+.explainer-card dd {
+  margin: 2px 0 var(--space-3);
+  font: 400 12.5px/1.55 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.explainer-card dd:last-child {
+  margin-bottom: 0;
+}
+
+.explainer-card ul {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.explainer-card li {
+  position: relative;
+  padding-left: 14px;
+  font: 400 12.5px/1.55 var(--font-sans);
+  color: var(--ink-secondary);
+}
+
+.explainer-card li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.explainer-card strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.explainer-card kbd {
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--ink);
+  font: 500 11px/1.6 var(--font-mono);
+}
+
+.explainer-glossary {
+  display: grid;
+  gap: 7px;
+}
+
+.explainer-glossary > div {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  gap: 8px;
+}
+
+.explainer-glossary dt {
+  font-size: 12px;
+}
+
+.explainer-glossary dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* -------------------------------------------------------------- footer */
+
+.explainer-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  font: 400 12px/1.4 var(--font-sans);
+  color: var(--ink-muted);
+}
+
+.explainer-cta {
+  padding: 10px 18px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--ink-inverse);
+  font: 600 14px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.explainer-cta:hover {
+  background: var(--accent-hover);
+}
+
+/* --------------------------------------------------------- folded bar */
+
+.explainer-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: var(--space-4);
+  padding: 10px var(--space-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-secondary);
+  font: 400 13px/1 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.explainer-bar svg {
+  color: var(--accent);
+}
+
+.explainer-bar strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.explainer-bar:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.explainer-bar-chev {
+  margin-left: auto;
+}
+
+@media (max-width: 1000px) {
+  .explainer-steps,
+  .explainer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .explainer-arrow {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .explainer {
+    padding: var(--space-4);
+  }
+
+  .explainer-glossary > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

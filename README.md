@@ -61,6 +61,10 @@ python backend/evaluate.py     # recompute benchmark metrics and figures
 
 Presenter tips:
 
+- First-time visitors to the Model page get a "How the digital twin works" panel (3-step
+  explanation, how to read the map, glossary). "Got it" folds it to a one-line bar; ⓘ icons
+  next to jargon explain terms in place across the Model and Comparisons pages.
+
 - `http://localhost:5173/model-test?replay=2024-05-04` opens a replay directly.
 - On the Model page, **Space** plays or pauses the 14 days, and **← / →** step one day.
 - Click a city dot on the Karnataka map to chart it. Hover any cell for forecast, recorded and error values.

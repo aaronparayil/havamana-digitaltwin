@@ -8,6 +8,7 @@ import {
 import { chartOptions as sharedChartOptions, lineSeries, barSeries } from '../styles/chartTheme'
 import { seriesFor } from '../styles/dataColors'
 import { API_BASE } from '../hooks/useApiHealth'
+import { InfoTip } from '../components/InfoTip'
 import '../pages/ModelSimulation.css'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, ChartTooltip, Legend, Filler)
@@ -36,6 +37,14 @@ function bestFor(models, variable, stat) {
     }
   }
   return best
+}
+
+// One line per forecaster, shown from the ⓘ beside its name.
+const MODEL_BLURBS = {
+  ConvLSTM2D: 'This project’s neural network. It learns how rain and heat move across the map from 11 years of data.',
+  Climatology: 'Predicts the 15-year average for each date. Knows the seasons, but not this week’s weather.',
+  Persistence: 'Predicts that every coming day looks exactly like today. Hard to beat for tomorrow, poor after that.',
+  LinearTrend: 'Extends each square’s trend over the last 30 days in a straight line.',
 }
 
 const TABLE_COLUMNS = [
@@ -211,7 +220,15 @@ export function Comparisons() {
           <section className="benchmark-table-card">
             <div className="map-card-header">
               <div>
-                <span className="section-kicker">Empirical Verification (2023–2025 Test Split)</span>
+                <span className="section-kicker">
+                  Empirical Verification (2023–2025 Test Split)
+                  <InfoTip>
+                    Every model forecast the same 1,083 windows from 2023–2025, data none of them was
+                    trained on. <strong>MAE</strong> is the average error (lower is better).{' '}
+                    <strong>R²</strong> is how much of the real variation a model captures (higher is
+                    better, 1 is perfect).
+                  </InfoTip>
+                </span>
                 <h2 className="card-title">Forecasting Model Benchmark</h2>
               </div>
               <span className="card-meta">Lower MAE is better · higher R² is better</span>
@@ -237,6 +254,7 @@ export function Comparisons() {
                       <tr key={name} className={isModel ? 'highlight-row' : ''}>
                         <td>
                           <strong>{name}</strong>
+                          <InfoTip label={`About ${name}`}>{MODEL_BLURBS[name]}</InfoTip>
                           {isModel && <span className="model-tag">our model</span>}
                         </td>
                         {TABLE_COLUMNS.map(([variable, stat, unit]) => {
@@ -272,7 +290,13 @@ export function Comparisons() {
           <section className="sim-main-grid">
             {/* Lead-time degradation */}
             <div className="chart-card">
-              <span className="section-kicker">Forecast Horizon Degradation</span>
+              <span className="section-kicker">
+                Forecast Horizon Degradation
+                <InfoTip>
+                  Average error at each lead day: +1d is tomorrow, +14d is two weeks out. Every forecast
+                  gets worse further ahead. The question is which line stays lowest, and for how long.
+                </InfoTip>
+              </span>
               <h2 className="card-title">Error vs. Lead Day — all models</h2>
               <div className="chart-area">
                 {leadTimeChartData ? (

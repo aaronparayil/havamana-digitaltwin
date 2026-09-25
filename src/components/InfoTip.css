@@ -1,0 +1,75 @@
+.infotip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+  /* Tips sit inside uppercase, letter-spaced labels; reset that here. */
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.infotip-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: help;
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.infotip-btn:hover,
+.infotip.is-open .infotip-btn {
+  color: var(--accent);
+  background: var(--accent-sunk);
+}
+
+.infotip-btn:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 1px;
+}
+
+/* Fixed, positioned by InfoTip.jsx from the button's rect, so cards and
+   scrolling tables that clip overflow can't cut it off. */
+.infotip-bubble {
+  position: fixed;
+  z-index: 60;
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 12px;
+  background: rgba(10, 17, 23, 0.97);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  color: var(--ink-secondary);
+  font: 400 12.5px/1.55 var(--font-sans);
+  white-space: normal;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-3px);
+  transition: opacity 140ms ease-out, transform 140ms ease-out, visibility 0s linear 140ms;
+  pointer-events: none;
+}
+
+.infotip.is-open .infotip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 140ms ease-out, transform 140ms ease-out, visibility 0s;
+}
+
+.infotip-bubble strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .infotip-bubble {
+    transition: none;
+  }
+}
