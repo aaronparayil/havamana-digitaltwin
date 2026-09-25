@@ -273,3 +273,28 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
+/* Laptop and projector widths (1366 at 125% scaling is ~1100 CSS px): the
+   Tour button made the action cluster too wide, so it steps down in two
+   stages before anything is allowed to push off the edge. */
+@media (max-width: 1240px) {
+  .search-trigger {
+    min-width: 0;
+    padding: 7px 10px;
+  }
+
+  .search-trigger kbd {
+    display: none;
+  }
+}
+
+@media (max-width: 1160px) {
+  .search-trigger-label,
+  .tour-trigger span {
+    display: none;
+  }
+
+  .tour-trigger {
+    padding: 0 10px;
+  }
+}

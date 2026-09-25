@@ -76,6 +76,16 @@ function placeCard(hole, card, vw, vh) {
     const left = side === 'right' ? hole.x + hole.w + GAP : hole.x - card.w - GAP
     return { left, top, side, arrow: Math.max(20, Math.min(cy - top, card.h - 20)) }
   }
+  // Short of room but the target is not screen-sized: use the roomier of
+  // above/below and let the card sit tight against the edge of the window.
+  if (hole.h < vh * 0.55) {
+    const below = room.bottom >= room.top
+    const left = clampX(cx - card.w / 2)
+    const top = below
+      ? Math.min(hole.y + hole.h + GAP, vh - card.h - 4)
+      : Math.max(4 + 56, hole.y - card.h - GAP)
+    return { left, top, side: below ? 'bottom' : 'top', arrow: Math.max(20, Math.min(cx - left, card.w - 20)) }
+  }
   // Target fills the screen (the globe, a big map): sit inside it, bottom-right.
   return {
     left: clampX(Math.min(hole.x + hole.w, vw) - card.w - 20),
@@ -121,8 +131,10 @@ function TourOverlay({ step, setStep, onClose }) {
       if (cancelled) return
       targetRef.current = el
       if (el) {
-        const tall = el.getBoundingClientRect().height > window.innerHeight - 320
-        el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: reduceMotion() ? 'auto' : 'smooth' })
+        // Near the top, not centred: on a short screen (a 1280x720 projector
+        // window is ~620 px of page) centring left too little room above or
+        // below for the card. scroll-margin keeps it clear of the top bar.
+        el.scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' })
       }
       setBusy(false)
     })()
