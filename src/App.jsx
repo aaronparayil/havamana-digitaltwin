@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { TourProvider } from './components/Tour'
 import { TopBar } from './components/TopBar'
 import { useApiHealth } from './hooks/useApiHealth'
 import { Dashboard } from './pages/Dashboard'
@@ -39,6 +40,7 @@ function App() {
   }[health.state]
 
   return (
+    <TourProvider>
     <div className="app-shell">
 
       <TopBar
@@ -61,6 +63,7 @@ function App() {
         </ErrorBoundary>
       </main>
     </div>
+    </TourProvider>
   )
 }
 

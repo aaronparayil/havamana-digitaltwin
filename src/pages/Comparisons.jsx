@@ -217,7 +217,7 @@ export function Comparisons() {
       {!loading && !error && metrics && (
         <>
           {/* Benchmark Table */}
-          <section className="benchmark-table-card">
+          <section className="benchmark-table-card" data-tour="benchmark">
             <div className="map-card-header">
               <div>
                 <span className="section-kicker">
@@ -289,7 +289,7 @@ export function Comparisons() {
 
           <section className="sim-main-grid">
             {/* Lead-time degradation */}
-            <div className="chart-card">
+            <div className="chart-card" data-tour="lead-chart">
               <span className="section-kicker">
                 Forecast Horizon Degradation
                 <InfoTip>

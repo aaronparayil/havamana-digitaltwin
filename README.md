@@ -61,6 +61,11 @@ python backend/evaluate.py     # recompute benchmark metrics and figures
 
 Presenter tips:
 
+- **Guided tour:** the **Tour** button in the top bar runs a 15-step spotlight walkthrough of
+  the whole site (it changes pages and opens the heatwave replay by itself). First-time
+  visitors are offered it automatically. Use → / ← / Esc. Edit the steps in
+  `src/components/tourSteps.js`; targets are `data-tour="..."` attributes in the markup.
+
 - First-time visitors to the Model page get a "How the digital twin works" panel (3-step
   explanation, how to read the map, glossary). "Got it" folds it to a one-line bar; ⓘ icons
   next to jargon explain terms in place across the Model and Comparisons pages.

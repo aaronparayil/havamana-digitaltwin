@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
-import { Menu, X, Search as SearchIcon } from 'lucide-react'
+import { Menu, X, Search as SearchIcon, Compass } from 'lucide-react'
 import { NAV } from './navItems'
 import { SearchModal } from './Search'
+import { useTour } from './tourContext'
 import './TopBar.css'
 
 /**
@@ -17,6 +18,7 @@ import './TopBar.css'
 export function TopBar({ status }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const tour = useTour()
 
   // Cmd/Ctrl-K opens search, as in every tool this app sits beside.
   useEffect(() => {
@@ -41,13 +43,14 @@ export function TopBar({ status }) {
         </span>
       </NavLink>
 
-      <nav className={`topnav ${menuOpen ? 'is-open' : ''}`}>
+      <nav className={`topnav ${menuOpen ? 'is-open' : ''}`} data-tour="nav">
         {NAV.map(({ to, label, icon: Icon, end, soon }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
             viewTransition
+            data-tour={to === '/scenarios' ? 'nav-whatif' : undefined}
             className={({ isActive }) => `topnav-link ${isActive ? 'active' : ''}`}
             onClick={() => setMenuOpen(false)}
           >
@@ -63,6 +66,16 @@ export function TopBar({ status }) {
       {status}
 
       <div className="topbar-actions">
+        <button
+          className="tour-trigger"
+          onClick={() => { setMenuOpen(false); tour.start() }}
+          data-tour="tour-btn"
+          title="Take a guided tour of the site"
+        >
+          <Compass size={15} />
+          <span>Tour</span>
+        </button>
+
         <button
           className="action-button search-trigger"
           aria-label="Search"

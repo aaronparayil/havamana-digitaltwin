@@ -825,7 +825,7 @@ export function Globe3D({
 
       {/* Zoom path: world -> India -> Karnataka, where Karnataka is the
           model's own domain and hands off to the forecast page. */}
-      <div className="globe-nav" role="group" aria-label="Camera view">
+      <div className="globe-nav" role="group" aria-label="Camera view" data-tour="globe-nav">
         {['world', 'india'].map((k) => (
           <button
             key={k}

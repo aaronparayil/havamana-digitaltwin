@@ -800,7 +800,7 @@ export function ModelSimulation() {
       <ModelExplainer />
 
       {/* Explorer Mode Tabs: Forward Scenarios vs. a Specific Calendar Date */}
-      <section className="sim-controls-bar" style={{ marginBottom: 4 }}>
+      <section className="sim-controls-bar" style={{ marginBottom: 4 }} data-tour="explore">
         <div className="control-group">
           <span className="control-label">
             Explore:
@@ -813,12 +813,14 @@ export function ModelSimulation() {
           <div className="pill-group">
             <button
               className={`pill-btn ${explorerMode === 'future' ? 'active' : ''}`}
+              data-tour="forecast-tab"
               onClick={() => { setIsPlaying(false); setExplorerMode('future') }}
             >
               🔮 Forecast ahead
             </button>
             <button
               className={`pill-btn ${explorerMode === 'date' ? 'active' : ''}`}
+              data-tour="replay-tab"
               onClick={() => { setIsPlaying(false); setExplorerMode('date') }}
             >
               🎯 Replay &amp; verify
@@ -829,7 +831,7 @@ export function ModelSimulation() {
 
       {explorerMode === 'date' ? (
       <>
-      <section className="replay-grid" aria-label="Featured replays">
+      <section className="replay-grid" aria-label="Featured replays" data-tour="replays">
         {FEATURED_REPLAYS.map((r) => (
           <button
             key={r.date}
@@ -852,7 +854,7 @@ export function ModelSimulation() {
         ))}
       </section>
       {/* Date Explorer: forecast (and actual recorded climate, if available) for any chosen date, past or future */}
-      <section className="sim-controls-bar">
+      <section className="sim-controls-bar" data-tour="controls">
         <div className="control-group">
           <span className="control-label">Forecast Start Date:</span>
           <DatePicker
@@ -924,7 +926,7 @@ export function ModelSimulation() {
 
       {dateForecast && (
         <>
-          <section className="timeline-card">
+          <section className="timeline-card" data-tour="timeline">
             <div className="timeline-top">
               <div className="timeline-playback">
                 <button
@@ -977,7 +979,7 @@ export function ModelSimulation() {
           </section>
 
           {dateForecast.window_skill && (
-            <section className="skill-strip">
+            <section className="skill-strip" data-tour="skill">
               <div className="skill-intro">
                 <span className="section-kicker">
                   How the model did in this window
@@ -1000,7 +1002,7 @@ export function ModelSimulation() {
           )}
 
           <section className="sim-main-grid">
-            <div className="map-card">
+            <div className="map-card" data-tour="map">
               <div className="map-card-header">
                 <div>
                   <span className="section-kicker">Karnataka Spatial Grid (32×32 High-Res)</span>
@@ -1081,7 +1083,7 @@ export function ModelSimulation() {
               <MapLegend variable={activeVariable} mode={dateViewMode === 'error' ? 'error' : 'forecast'} />
             </div>
 
-            <div className="chart-card">
+            <div className="chart-card" data-tour="chart">
               <div className="card-row">
                 <div>
                   <span className="section-kicker">Regional Point Trajectory</span>
@@ -1109,7 +1111,7 @@ export function ModelSimulation() {
       ) : (
       <>
       {/* Scenario & Variable Control Bar */}
-      <section className="sim-controls-bar">
+      <section className="sim-controls-bar" data-tour="controls">
         {/* Scenarios */}
         <div className="control-group">
           <span className="control-label">
@@ -1200,7 +1202,7 @@ export function ModelSimulation() {
       </section>
 
       {/* 14-Day Timeline Player */}
-      <section className="timeline-card">
+      <section className="timeline-card" data-tour="timeline">
         <div className="timeline-top">
           <div className="timeline-playback">
             <button
@@ -1263,7 +1265,7 @@ export function ModelSimulation() {
       {/* Main Grid: Spatial Map & Time Series */}
       <section className="sim-main-grid">
         {/* 2D Spatial Map Card */}
-        <div className="map-card">
+        <div className="map-card" data-tour="map">
           <div className="map-card-header">
             <div>
               <span className="section-kicker">Karnataka Spatial Grid (32×32 High-Res)</span>
@@ -1399,7 +1401,7 @@ export function ModelSimulation() {
         </div>
 
         {/* 14-Day City Line Chart */}
-        <div className="chart-card">
+        <div className="chart-card" data-tour="chart">
           <div className="card-row">
             <div>
               <span className="section-kicker">Regional Point Trajectory</span>

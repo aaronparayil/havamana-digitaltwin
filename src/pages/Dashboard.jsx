@@ -199,7 +199,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="globe-stage">
+        <div className="globe-stage" data-tour="globe">
           <Suspense fallback={<div className="globe-loading"><RefreshCw size={14} className="spin" />Loading 3D globe…</div>}>
             <Globe3D
               grid={grid}
@@ -233,7 +233,7 @@ export function Dashboard() {
       </section>
 
       {/* ------------------------------------------------------- city table */}
-      <section className="panel" style={{ marginTop: 'var(--space-4)' }}>
+      <section className="panel" style={{ marginTop: 'var(--space-4)' }} data-tour="city-table">
         <div className="panel-heading">
           <div>
             <span className="section-kicker">Major cities · observed now</span>

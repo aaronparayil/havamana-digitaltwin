@@ -351,3 +351,18 @@
     gap: 0;
   }
 }
+
+.explainer-tour {
+  padding: 9px 16px;
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--accent);
+  font: 600 13px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.explainer-tour:hover {
+  background: var(--accent-sunk);
+}

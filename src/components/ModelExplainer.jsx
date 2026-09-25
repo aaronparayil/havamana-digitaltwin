@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   History, BrainCircuit, CalendarRange, ArrowRight, ChevronDown, GraduationCap, X,
 } from 'lucide-react'
+import { useTour } from './tourContext'
 import './ModelExplainer.css'
 
 /* First-visit guide to the Model page. Open by default the first time; "Got
@@ -103,6 +104,7 @@ function NetGlyph() {
 
 export function ModelExplainer() {
   const [open, setOpen] = useState(() => !readDismissed())
+  const tour = useTour()
 
   const dismiss = () => {
     writeDismissed(true)
@@ -196,6 +198,9 @@ export function ModelExplainer() {
 
       <div className="explainer-foot">
         <button className="explainer-cta" onClick={dismiss}>Got it, show me the model</button>
+        <button className="explainer-tour" onClick={() => { dismiss(); tour.start() }}>
+          Or take the guided tour →
+        </button>
         <span>You can reopen this any time from the bar at the top.</span>
       </div>
     </section>
