@@ -24,7 +24,13 @@ pip install -r backend/requirements.txt   # once, ideally inside a virtualenv
 npm run dev                                # starts the Flask API (port 5005) and Vite (port 5173)
 ```
 
-Then open http://localhost:5173. `npm run dev` automatically uses a virtualenv at `.venv`
+Then open http://localhost:5173.
+
+**On Windows, for a demo:** double-click `Start Demo.bat`. It starts the API and the site in
+two minimised windows, waits until the model is loaded, warms it up, and opens Chrome
+full-screen (about 10 s from cold). `Stop Demo.bat` shuts both down. Before a demo day,
+run `npm run snapshot` while online. It refreshes the saved readings the Overview globe
+falls back to if the venue has no internet. `npm run dev` automatically uses a virtualenv at `.venv`
 or `../.venv` if one exists; set `HAVAMANA_PYTHON` to point at a specific interpreter.
 
 The status pill in the top bar reads **Model active** once the trained model has loaded.
