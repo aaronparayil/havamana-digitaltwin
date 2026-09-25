@@ -740,3 +740,28 @@ capped so the
   margin-right: 8px;
   vertical-align: -3px;
 }
+
+/* Offline notice on the Overview page (bundled snapshot in use). */
+.offline-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: var(--space-4);
+  padding: 10px var(--space-4);
+  border: 1px solid var(--status-warning-sunk);
+  border-left: 3px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--ink-secondary);
+  font: 400 13px/1.5 var(--font-sans);
+}
+
+.offline-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--status-warning);
+}
+
+.offline-note strong {
+  color: var(--ink);
+}

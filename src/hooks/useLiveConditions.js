@@ -20,8 +20,8 @@ import { useEffect, useState, useCallback } from 'react'
    the globe. Keep the two clearly separated.
    ========================================================================== */
 
-const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
-const AIR_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality'
+export const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
+export const AIR_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality'
 
 /* Two sampling lattices.
 
@@ -99,7 +99,7 @@ export function windToUV(speedKmh, dirFromDeg) {
   }
 }
 
-function buildGridUrl(latArr, lonArr) {
+export function buildGridUrl(latArr, lonArr) {
   const lats = []
   const lons = []
   for (let y = 0; y < latArr.length; y++) {
@@ -117,7 +117,7 @@ function buildGridUrl(latArr, lonArr) {
   return `${FORECAST_URL}?${p}`
 }
 
-function buildCityUrl(base, current) {
+export function buildCityUrl(base, current) {
   const p = new URLSearchParams({
     latitude: CITIES.map((c) => c.lat).join(','),
     longitude: CITIES.map((c) => c.lon).join(','),
@@ -136,12 +136,13 @@ function buildCityUrl(base, current) {
 const CACHE_KEY = 'havamana.live.v2'
 const CACHE_TTL_MS = 30 * 60 * 1000
 
-function readCache() {
+function readCache({ anyAge = false } = {}) {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    if (!parsed?.at || Date.now() - parsed.at > CACHE_TTL_MS) return null
+    if (!parsed?.at) return null
+    if (!anyAge && Date.now() - parsed.at > CACHE_TTL_MS) return null
     return parsed
   } catch {
     return null   // private mode, quota, corrupt entry — just refetch
@@ -157,7 +158,45 @@ function writeCache(payload) {
 }
 
 /** Open-Meteo returns a bare object for one point and an array for many. */
-const asArray = (d) => (Array.isArray(d) ? d : [d])
+export const asArray = (d) => (Array.isArray(d) ? d : [d])
+
+export const CITY_WX_FIELDS = 'temperature_2m,wind_speed_10m,wind_direction_10m,relative_humidity_2m'
+export const CITY_AIR_FIELDS = 'pm2_5,pm10,european_aqi,us_aqi'
+
+/** Merges the two per-city responses into one reading per city. */
+export function citiesFrom(cityWx, cityAir) {
+  const wx = asArray(cityWx)
+  const air = asArray(cityAir)
+  return CITIES.map((c, i) => ({
+    ...c,
+    temp: wx[i]?.current?.temperature_2m ?? null,
+    humidity: wx[i]?.current?.relative_humidity_2m ?? null,
+    windSpeed: wx[i]?.current?.wind_speed_10m ?? null,
+    windDir: wx[i]?.current?.wind_direction_10m ?? null,
+    pm25: air[i]?.current?.pm2_5 ?? null,
+    pm10: air[i]?.current?.pm10 ?? null,
+    aqi: air[i]?.current?.us_aqi ?? null,
+    aqiEu: air[i]?.current?.european_aqi ?? null,
+  }))
+}
+
+/* Venue Wi-Fi can accept a connection and then never answer. Without a
+   timeout the page sat on "Loading" indefinitely; now a stalled request
+   gives up and the fallback below takes over. */
+const FETCH_TIMEOUT_MS = 8000
+
+async function fetchWithTimeout(url) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+  try {
+    return await fetch(url, { signal: ctrl.signal })
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Open-Meteo did not respond in time.')
+    throw err
+  } finally {
+    clearTimeout(t)
+  }
+}
 
 /** Decodes a multi-point response into typed field arrays indexed y * nx + x. */
 function decodeGrid(json, lats, lons, wrap) {
@@ -204,16 +243,17 @@ export function useLiveConditions({ refreshMs = 15 * 60 * 1000 } = {}) {
           observedAt: cached.observedAt,
           error: null,
           fromCache: true,
+          source: 'cache',
         })
         return
       }
     }
     try {
       const [globalRes, gridRes, cityWxRes, cityAirRes] = await Promise.all([
-        fetch(buildGridUrl(globalLats, globalLons)),
-        fetch(buildGridUrl(gridLats, gridLons)),
-        fetch(buildCityUrl(FORECAST_URL, 'temperature_2m,wind_speed_10m,wind_direction_10m,relative_humidity_2m')),
-        fetch(buildCityUrl(AIR_URL, 'pm2_5,pm10,european_aqi,us_aqi')),
+        fetchWithTimeout(buildGridUrl(globalLats, globalLons)),
+        fetchWithTimeout(buildGridUrl(gridLats, gridLons)),
+        fetchWithTimeout(buildCityUrl(FORECAST_URL, CITY_WX_FIELDS)),
+        fetchWithTimeout(buildCityUrl(AIR_URL, CITY_AIR_FIELDS)),
       ])
       if ([globalRes, gridRes, cityWxRes, cityAirRes].some((r) => r.status === 429)) {
         throw new Error(
@@ -234,26 +274,33 @@ export function useLiveConditions({ refreshMs = 15 * 60 * 1000 } = {}) {
       const globalGrid = decodeGrid(globalJson, globalLats, globalLons, true)
       const grid = decodeGrid(gridJson, gridLats, gridLons, false)
 
-      // ---- cities
-      const wx = asArray(cityWx)
-      const air = asArray(cityAir)
-      const cities = CITIES.map((c, i) => ({
-        ...c,
-        temp: wx[i]?.current?.temperature_2m ?? null,
-        humidity: wx[i]?.current?.relative_humidity_2m ?? null,
-        windSpeed: wx[i]?.current?.wind_speed_10m ?? null,
-        windDir: wx[i]?.current?.wind_direction_10m ?? null,
-        pm25: air[i]?.current?.pm2_5 ?? null,
-        pm10: air[i]?.current?.pm10 ?? null,
-        aqi: air[i]?.current?.us_aqi ?? null,
-        aqiEu: air[i]?.current?.european_aqi ?? null,
-      }))
+      const cities = citiesFrom(cityWx, cityAir)
 
       const observedAt = asArray(gridJson)[0]?.current?.time ?? null
       writeCache({ globalJson, gridJson, cities, observedAt })
-      setState({ status: 'ready', grid, globalGrid, cities, observedAt, error: null, fromCache: false })
+      setState({ status: 'ready', grid, globalGrid, cities, observedAt, error: null, fromCache: false, source: 'live' })
     } catch (err) {
-      setState((s) => ({ ...s, status: 'error', error: String(err.message || err) }))
+      const error = String(err.message || err)
+      /* Offline fallback, so the opening screen of a demo is never empty:
+           1. readings already on screen stay (shown as "last known")
+           2. else the last cached readings, however old
+           3. else a real snapshot bundled with the app
+         Each is labelled with its own observation time. */
+      const fallback = readCache({ anyAge: true })
+        ?? { ...(await import('../assets/live-snapshot.json')).default, snapshot: true }
+      setState((s) => {
+        if (s.cities.length) return { ...s, status: 'error', error }
+        return {
+          status: 'error',
+          error,
+          grid: decodeGrid(fallback.gridJson, gridLats, gridLons, false),
+          globalGrid: decodeGrid(fallback.globalJson, globalLats, globalLons, true),
+          cities: fallback.cities,
+          observedAt: fallback.observedAt,
+          fromCache: true,
+          source: fallback.snapshot ? 'snapshot' : 'cache',
+        }
+      })
     }
   }, [])
 
@@ -266,6 +313,12 @@ export function useLiveConditions({ refreshMs = 15 * 60 * 1000 } = {}) {
     const t = setInterval(load, refreshMs)
     return () => clearInterval(t)
   }, [load, refreshMs])
+
+  useEffect(() => {
+    if (state.status !== 'error') return undefined
+    const t = setInterval(() => load({ force: true }), 60 * 1000)
+    return () => clearInterval(t)
+  }, [state.status, load])
 
   return { ...state, reload: () => load({ force: true }) }
 }

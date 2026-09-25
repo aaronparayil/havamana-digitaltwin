@@ -28,7 +28,7 @@ function compass(deg) {
 }
 
 export function Dashboard() {
-  const { status, grid, globalGrid, cities, observedAt, error, fromCache, reload } = useLiveConditions()
+  const { status, grid, globalGrid, cities, observedAt, error, fromCache, source, reload } = useLiveConditions()
   const navigate = useNavigate()
   const [layer, setLayer] = useState('wind')
   const [sortKey, setSortKey] = useState('aqi')
@@ -86,6 +86,10 @@ export function Dashboard() {
   const hasData = cities.length > 0
   const isOutage = isError && !hasData
   const isStale = isError && hasData
+  const isSnapshot = isStale && source === 'snapshot'
+  const observedLabel = observedAt
+    ? new Date(`${observedAt}Z`).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null
 
   return (
     <div className="content-wrap">
@@ -95,7 +99,7 @@ export function Dashboard() {
             {dateStr}
             {hasData && (
               <span className={`live-pill ${isStale ? 'is-stale' : ''}`}>
-                <i /> {isStale ? 'Last known' : fromCache ? 'Cached' : 'Live'}
+                <i /> {isSnapshot ? 'Offline snapshot' : isStale ? 'Last known' : fromCache ? 'Cached' : 'Live'}
               </span>
             )}
           </div>
@@ -106,7 +110,7 @@ export function Dashboard() {
           </p>
         </div>
         <div className="refresh-cluster">
-          {isStale && (
+          {isStale && !isSnapshot && (
             <span className="refresh-note" title={error}>
               Couldn&rsquo;t refresh &mdash; showing last reading
             </span>
@@ -125,6 +129,17 @@ export function Dashboard() {
             <strong>Live feed unavailable.</strong> {error}{' '}
             The globe needs an internet connection; everything else on the site works offline.
           </div>
+        </div>
+      )}
+
+      {/* No internet at the venue: say plainly what is on screen. */}
+      {isSnapshot && (
+        <div className="offline-note" role="status">
+          <AlertCircle size={15} />
+          <span>
+            <strong>Offline.</strong> Showing real Open-Meteo readings saved on {observedLabel ?? 'an earlier date'}.
+            Live data comes back by itself when the connection does. The Karnataka model works fully offline.
+          </span>
         </div>
       )}
 
@@ -207,6 +222,7 @@ export function Dashboard() {
               cities={cities}
               layer={layer}
               observedAt={observedAt}
+              source={isSnapshot ? 'snapshot' : isStale ? 'last-known' : 'live'}
               onDrillToModel={() => navigate('/model-test', { viewTransition: true })}
             />
           </Suspense>

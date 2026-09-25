@@ -219,6 +219,7 @@ export function Globe3D({
   cities = [],
   layer = 'wind',
   observedAt,
+  source = 'live',
   onDrillToModel,
 }) {
   const mountRef = useRef(null)
@@ -853,7 +854,9 @@ export function Globe3D({
       {/* Provenance, on the face of the visualisation. The globe shows live
           third-party data, not this project's model. */}
       <div className="globe-source">
-        <span>Live · Open-Meteo</span>
+        <span className={source === 'live' ? '' : 'is-offline'}>
+          {source === 'snapshot' ? 'Snapshot' : source === 'last-known' ? 'Last known' : 'Live'} · Open-Meteo
+        </span>
         {observedAt && <span className="globe-time">{observedAt.replace('T', ' ')} UTC</span>}
         <small>observed conditions — not ConvLSTM output</small>
       </div>
